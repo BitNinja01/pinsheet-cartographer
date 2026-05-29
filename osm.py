@@ -9,9 +9,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from lxml import etree
-
-
 # Maps OSM tag values to internal feature type names
 _GOLF_TAG_MAP = {
     "fairway": "fairway",
@@ -72,6 +69,7 @@ def parse_osm_file(path: Path) -> list[dict]:
       - is_point: bool
       - tags: dict of raw OSM tags
     """
+    from lxml import etree
     tree = etree.parse(str(path))
     root = tree.getroot()
 

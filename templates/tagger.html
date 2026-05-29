@@ -106,7 +106,7 @@ var API_BASE = "/plugins/cartographer/{{ course_encoded }}" + "/tag/api";
 </div>
 
 <script>
-  const map = L.map('map');
+  const map = L.map('map', {center: [0, 0], zoom: 2});
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 20, attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);

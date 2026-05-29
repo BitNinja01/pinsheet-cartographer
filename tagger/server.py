@@ -6,20 +6,17 @@ from flask import jsonify
 from ..data import get_osm_path, load_courses_geo_raw, save_courses_geo
 from ..osm import parse_osm_file
 
-from shapely.geometry import LineString, Polygon, MultiPolygon, Point
-from shapely.ops import split as shapely_split
-
 
 def _feature_to_shapely(feature: dict):
     """Convert an OSM feature dict to a shapely geometry (lon,lat coords)."""
+    from shapely.geometry import Point, Polygon, LineString
     if feature["is_point"]:
         return Point(feature["geometry"][1], feature["geometry"][0])
     coords = [(pt[1], pt[0]) for pt in feature["geometry"]]
     if len(coords) < 3:
         return Point(coords[0])
     if feature["type"] in ("path", "waterway"):
-        from shapely.geometry import LineString as LS
-        return LS(coords)
+        return LineString(coords)
     return Polygon(coords)
 
 
@@ -28,6 +25,7 @@ def _shapely_to_geojson_rings(geom) -> list[list[list[float]]]:
 
     Returns rings in [lat, lon] order (matching OSM convention).
     """
+    from shapely.geometry import Polygon, MultiPolygon
     if isinstance(geom, Polygon):
         return [[[lat, lon] for lon, lat in geom.exterior.coords]]
     if isinstance(geom, MultiPolygon):
@@ -53,6 +51,9 @@ def _apply_splits(features: list[dict], split_lines: dict) -> list[dict]:
         The same features list, mutated in-place with _split_pieces added
         to intersected features.
     """
+    from shapely.geometry import LineString, Polygon, MultiPolygon, Point
+    from shapely.ops import split as shapely_split
+
     course_wide = {"water", "waterway", "path"}
 
     for split_id, (p1, p2) in split_lines.items():
@@ -157,7 +158,10 @@ def handle_get_features(course_name: str):
     if not osm_path.exists():
         return jsonify({"type": "FeatureCollection", "features": [], "course_name": course_name, "bounds": None})
 
-    features = parse_osm_file(osm_path)
+    try:
+        features = parse_osm_file(osm_path)
+    except ImportError:
+        return jsonify({"type": "FeatureCollection", "features": [], "course_name": course_name, "bounds": None, "error": "Missing dependency: install lxml"})
     split_config = _load_split_config(course_name)
     _apply_splits(features, split_config)
 
@@ -302,7 +306,10 @@ def handle_get_assignments(course_name: str):
     osm_path = get_osm_path(course_name)
     if not osm_path.exists():
         return jsonify({})
-    features = parse_osm_file(osm_path)
+    try:
+        features = parse_osm_file(osm_path)
+    except ImportError:
+        return jsonify({})
 
     holes = existing.get("holes", {})
     expanded = _expand_split_features(features)
