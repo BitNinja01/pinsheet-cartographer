@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
-.ps-layout { display: flex; height: 100vh; }
+.ps-layout { display: block; height: 100vh; padding: 0; }
 .ps-sidebar { display: none; }
-.ps-main { padding: 0; width: 100%; max-width: none; flex-direction: row; }
-#map { flex: 1; height: 100vh; }
-#sidebar { width: 360px; overflow-y: auto; }
+.ps-main { padding: 0; width: 100%; max-width: none; flex-direction: row; min-height: 0; }
+#map { position: fixed; top: 0; left: 0; width: calc(100% - 360px); height: 100vh; background: oklch(14% 0.010 240); }
+#sidebar { position: fixed; top: 0; right: 0; width: 360px; height: 100vh; overflow-y: auto; background: oklch(18% 0.012 240); border-left: 1px solid oklch(32% 0.015 240); }
 body { margin: 0; overflow: hidden; }
+#map .leaflet-tile-pane { filter: grayscale(1); }
 .tagger-error { padding: 12px; margin: 8px; border-radius: 4px; background: oklch(18% 0.06 25); border: 1px solid oklch(64% 0.20 25); color: oklch(64% 0.20 25); font-size: 14px; }
 </style>
 
