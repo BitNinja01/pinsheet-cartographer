@@ -321,6 +321,14 @@ def pdf_export(course):
 
 @bp.route("/<string:course>/pdf/generate", methods=["POST"])
 def pdf_generate(course):
+    try:
+        return _do_pdf_generate(course)
+    except Exception:
+        log.exception("cartographer: pdf_generate failed for %s", course)
+        return jsonify({"status": "error", "error": "Server error. Check logs."}), 500
+
+
+def _do_pdf_generate(course):
     dep_err = _check_pdf_deps()
     if dep_err:
         return jsonify({"status": "error", "error": dep_err}), 400

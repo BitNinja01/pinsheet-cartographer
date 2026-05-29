@@ -126,11 +126,12 @@
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(body),
-        }).then(function(r) { return r.json(); }).then(function(data) {
-            if (data.status === 'error') {
-                showError(data.error);
-                return;
+        }).then(function(r) {
+            if (!r.ok) {
+                return r.json().then(function(d) { throw new Error(d.error || 'Request failed'); }, function() { throw new Error('Server error (status ' + r.status + ')'); });
             }
+            return r.json();
+        }).then(function(data) {
             var evtSource = new EventSource(window.location.href + '/stream/' + data.job_id);
             evtSource.addEventListener('progress', function(e) {
                 var d = JSON.parse(e.data);
@@ -150,10 +151,8 @@
                 document.getElementById('download-link').href = d.download_url;
             });
             evtSource.addEventListener('error', function(e) {
-                if (e.lastEventId === 'error' || (e.data && e.data !== '')) {
-                    evtSource.close();
-                    try { showError(JSON.parse(e.data)); } catch(_) { showError('Generation failed'); }
-                }
+                evtSource.close();
+                try { showError(JSON.parse(e.data)); } catch(_) { showError('Generation failed. Check server logs.'); }
             });
         }).catch(function(err) {
             showError('Network error: ' + err.message);
