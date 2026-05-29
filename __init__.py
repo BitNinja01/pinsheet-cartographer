@@ -84,6 +84,12 @@ def register(app):
         _sys.modules[_bp_mod.__name__] = _bp_mod
         _bp_spec.loader.exec_module(_bp_mod)
         app.register_blueprint(_bp_mod.bp)
+
+        _csrf = app.extensions.get("csrf")
+        if _csrf is not None:
+            for _rule in app.url_map.iter_rules():
+                if _rule.endpoint and _rule.endpoint.startswith("cartographer.") and "POST" in _rule.methods:
+                    _csrf.exempt(app.view_functions[_rule.endpoint])
     except Exception as _exc:
         log.warning("cartographer: blueprint registration failed — %s", _exc)
 
