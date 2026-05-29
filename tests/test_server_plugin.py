@@ -49,7 +49,7 @@ def cartographer_app(tmp_path, monkeypatch):
     app._plugin_nav = []
     app.jinja_env.globals.setdefault("settings", {"theme": "dark"})
 
-    plugin_path = Path(__file__).parent.parent / "plugins" / "cartographer"
+    plugin_path = Path(__file__).parent.parent
     templates_dir = str(plugin_path / "templates")
     search_path = getattr(app.jinja_loader, "searchpath", None)
     if search_path is not None and templates_dir not in search_path:
