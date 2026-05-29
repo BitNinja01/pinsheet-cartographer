@@ -85,11 +85,6 @@
 }
 
 /* ====== Tagger ====== */
-.ps-layout { display: flex; height: 100vh; }
-.ps-sidebar { display: none; }
-.ps-main { padding: 0; width: 100%; max-width: none; }
-body.tagging { margin: 0; overflow: hidden; }
-
 #map { flex: 1; background: var(--ps-paper); }
 #map .leaflet-tile-pane { filter: grayscale(1); }
 
