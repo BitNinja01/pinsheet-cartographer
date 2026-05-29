@@ -13,9 +13,7 @@
 {% else %}
 <div class="carto-gallery" style="margin-top: 24px;" id="carto-gallery">
     {% for hole in holes %}
-    <a href="/plugins/cartographer/{{ course_name }}/hole/{{ hole.number }}"
-       class="carto-hole-card {% if not hole.has_data %}carto-hole-card--empty{% endif %}"
-       {% if not hole.has_data %}aria-disabled="true"{% endif %}>
+    <div class="carto-hole-card {% if not hole.has_data %}carto-hole-card--empty{% endif %}">
         <div class="carto-hole-number ps-eyebrow">{{ hole.number }}</div>
         <div class="carto-hole-thumb" data-hole="{{ hole.number }}">
             {% if hole.has_data %}
@@ -24,7 +22,7 @@
             <div class="carto-hole-placeholder">No Data</div>
             {% endif %}
         </div>
-    </a>
+    </div>
     {% endfor %}
 </div>
 
