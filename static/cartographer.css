@@ -46,9 +46,9 @@
 
 .carto-hole-number {
     position: absolute;
-    top: var(--ps-sp-1);
-    right: var(--ps-sp-1);
-    font-size: var(--ps-fs-h4);
+    top: 6px;
+    right: 8px;
+    font-size: 28px;
     font-weight: 700;
     line-height: 1;
 }
