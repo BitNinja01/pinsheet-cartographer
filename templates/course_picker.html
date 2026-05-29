@@ -25,6 +25,9 @@
                     <a href="/plugins/cartographer/{{ c.name }}/gallery" class="ps-btn ps-btn--ghost">View</a>
                     {% if c.has_osm %}
                     <a href="/plugins/cartographer/{{ c.name }}/tag" class="ps-btn ps-btn--ghost">Tag</a>
+                    {% else %}
+                    <button class="ps-btn ps-btn--ghost upload-osm-btn" data-course="{{ c.name }}">Upload OSM</button>
+                    <input type="file" accept=".osm" class="upload-osm-input" data-course="{{ c.name }}" style="display:none">
                     {% endif %}
                 </td>
             </tr>
@@ -40,4 +43,38 @@
     </p>
 </div>
 {% endif %}
+<script>
+document.querySelectorAll('.upload-osm-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        this.nextElementSibling.click();
+    });
+});
+document.querySelectorAll('.upload-osm-input').forEach(function(input) {
+    input.addEventListener('change', function() {
+        var file = this.files[0];
+        if (!file) return;
+        var course = this.getAttribute('data-course');
+        var btn = this.previousElementSibling;
+        var formData = new FormData();
+        formData.append('osm_file', file);
+        btn.textContent = 'Uploading...';
+        fetch('/plugins/cartographer/' + encodeURIComponent(course) + '/upload-osm', {
+            method: 'POST',
+            body: formData,
+        }).then(function(r) {
+            if (r.ok) {
+                location.reload();
+            } else {
+                return r.json().then(function(data) {
+                    btn.textContent = data.message || 'Upload failed';
+                    setTimeout(function() { btn.textContent = 'Upload OSM'; }, 3000);
+                });
+            }
+        }).catch(function() {
+            btn.textContent = 'Network error';
+            setTimeout(function() { btn.textContent = 'Upload OSM'; }, 3000);
+        });
+    });
+});
+</script>
 {% endblock %}
