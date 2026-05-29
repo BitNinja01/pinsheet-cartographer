@@ -37,18 +37,18 @@ def _get_settings():
 
 @bp.route("/")
 def course_picker():
-    import sqlite3
-    _db = sqlite3.connect(str(current_app.config["DB_PATH"]))
-    _server_courses = {
-        row["name"]: True
-        for row in _db.execute("SELECT name FROM courses").fetchall()
-    }
-    _db.close()
-
     courses_geo = load_courses_geo()
     courses = []
 
-    for name in sorted(set(list(_server_courses.keys()) + list(courses_geo.keys()))):
+    try:
+        import sqlite3
+        _db = sqlite3.connect(str(current_app.config["DB_PATH"]))
+        _server_names = {row["name"] for row in _db.execute("SELECT name FROM courses").fetchall()}
+        _db.close()
+    except Exception:
+        _server_names = set()
+
+    for name in sorted(set(_server_names) | set(courses_geo.keys())):
         geo_data = courses_geo.get(name, {})
         holes = geo_data.get("holes", {})
         scale = geo_data.get("scale", {})
