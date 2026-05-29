@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ps-topbar">
+    <h1 class="ps-h1">Generate PDF: {{ course_name }}</h1>
+</div>
+
+<div id="pdf-config" class="ps-card" style="margin-top: 24px;">
+    {% if not has_geometry %}
+    <p style="color: var(--ps-ink-3); margin-bottom: 16px;">
+        No geometry data for this course. Run the tagger first.
+    </p>
+    <a href="/plugins/cartographer/{{ course_encoded }}/tag" class="ps-btn ps-btn--accent">Open Tagger</a>
+    {% else %}
+    <form id="pdf-form">
+        <div style="margin-bottom: 20px;">
+            <label class="ps-label" style="display:block;margin-bottom:8px;">Top slot</label>
+            <select name="slot1" class="ps-input" style="width:100%;">
+                <option value="green_grid" selected>Green Grid</option>
+                <option value="stats_panel">Stats Panel</option>
+                <option value="notes">Notes</option>
+            </select>
+        </div>
+        <div style="margin-bottom: 20px;">
+            <label class="ps-label" style="display:block;margin-bottom:8px;">Bottom slot</label>
+            <select name="slot2" class="ps-input" style="width:100%;">
+                <option value="green_grid">Green Grid</option>
+                <option value="stats_panel" selected>Stats Panel</option>
+                <option value="notes">Notes</option>
+            </select>
+        </div>
+        <div style="margin-bottom: 16px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" name="show_stats" checked>
+                <span>Show calculated stats</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" name="yardage_arcs" checked>
+                <span>Yardage arcs</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" name="green_heightmap" checked>
+                <span>Green heightmap</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" name="green_contours" checked>
+                <span>Green contours</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" name="green_arrows" checked>
+                <span>Green arrows</span>
+            </label>
+        </div>
+        {% if tees %}
+        <div style="margin-bottom: 20px;">
+            <label class="ps-label" style="display:block;margin-bottom:8px;">Tees</label>
+            {% for tee in tees %}
+            <label style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;cursor:pointer;">
+                <input type="checkbox" name="tees" value="{{ tee }}" checked>
+                <span>{{ tee }}</span>
+            </label>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <button type="submit" class="ps-btn ps-btn--accent" id="btn-generate">Generate PDF</button>
+    </form>
+    {% endif %}
+</div>
+
+<div id="pdf-progress" class="ps-card" style="margin-top:24px;display:none;">
+    <h2 class="ps-h2" style="margin-bottom:12px;">Generating yardage book...</h2>
+    <div style="margin-bottom:8px;">
+        <span id="progress-text">Starting...</span>
+    </div>
+    <div class="pdf-progress-bar" style="width:100%;height:8px;background:var(--ps-rule-c);border-radius:4px;overflow:hidden;">
+        <div id="progress-fill" style="width:0%;height:100%;background:var(--ps-accent);border-radius:4px;transition:width 0.3s;"></div>
+    </div>
+    <div style="margin-top:8px;">
+        <span id="progress-detail" style="color:var(--ps-ink-3);font-size:13px;"></span>
+    </div>
+</div>
+
+<div id="pdf-result" class="ps-card" style="margin-top:24px;display:none;">
+    <div id="pdf-success" style="display:none;">
+        <p style="margin-bottom:16px;">Yardage book generated successfully!</p>
+        <a id="download-link" class="ps-btn ps-btn--accent" href="#">Download PDF</a>
+        <a href="/plugins/cartographer/" class="ps-btn ps-btn--ghost" style="margin-left:8px;">Back to Course Maps</a>
+    </div>
+    <div id="pdf-error" style="display:none;">
+        <p id="error-message" style="color:var(--ps-warn);margin-bottom:16px;"></p>
+        <button class="ps-btn ps-btn--ghost" onclick="location.reload()">Back to config</button>
+    </div>
+</div>
+
+<script>
+(function() {
+    var form = document.getElementById('pdf-form');
+    var config = document.getElementById('pdf-config');
+    var progress = document.getElementById('pdf-progress');
+    var result = document.getElementById('pdf-result');
+    var progressText = document.getElementById('progress-text');
+    var progressFill = document.getElementById('progress-fill');
+    var progressDetail = document.getElementById('progress-detail');
+
+    if (!form) return;
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        config.style.display = 'none';
+        progress.style.display = 'block';
+        result.style.display = 'none';
+
+        var formData = new FormData(form);
+        var body = {
+            slot1: formData.get('slot1') || 'green_grid',
+            slot2: formData.get('slot2') || 'stats_panel',
+            show_stats: formData.get('show_stats') !== null,
+            settings: {
+                'cartographer.yardage_arcs': formData.get('yardage_arcs') !== null,
+                'cartographer.green_heightmap': formData.get('green_heightmap') !== null,
+                'cartographer.green_contours': formData.get('green_contours') !== null,
+                'cartographer.green_arrows': formData.get('green_arrows') !== null,
+            }
+        };
+
+        fetch(window.location.href + '/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+        }).then(function(r) { return r.json(); }).then(function(data) {
+            if (data.status === 'error') {
+                showError(data.error);
+                return;
+            }
+            var evtSource = new EventSource(window.location.href + '/stream/' + data.job_id);
+            evtSource.addEventListener('progress', function(e) {
+                var d = JSON.parse(e.data);
+                var pct = Math.round(d.current / d.total * 100);
+                progressFill.style.width = pct + '%';
+                progressText.textContent = 'Sheet ' + Math.min(d.current, 20) + '/20';
+            });
+            evtSource.addEventListener('status', function(e) {
+                progressDetail.textContent = JSON.parse(e.data);
+            });
+            evtSource.addEventListener('complete', function(e) {
+                evtSource.close();
+                progress.style.display = 'none';
+                result.style.display = 'block';
+                document.getElementById('pdf-success').style.display = 'block';
+                var d = JSON.parse(e.data);
+                document.getElementById('download-link').href = d.download_url;
+            });
+            evtSource.addEventListener('error', function(e) {
+                if (e.lastEventId === 'error' || (e.data && e.data !== '')) {
+                    evtSource.close();
+                    try { showError(JSON.parse(e.data)); } catch(_) { showError('Generation failed'); }
+                }
+            });
+        }).catch(function(err) {
+            showError('Network error: ' + err.message);
+        });
+    });
+
+    function showError(msg) {
+        progress.style.display = 'none';
+        result.style.display = 'block';
+        document.getElementById('pdf-error').style.display = 'block';
+        document.getElementById('error-message').textContent = msg;
+    }
+})();
+</script>
+{% endblock %}
