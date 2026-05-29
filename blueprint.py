@@ -13,7 +13,6 @@ from flask import (
 )
 
 from .data import get_osm_path, load_courses_geo
-from .renderer import render_hole_svg
 from .tagger.server import (
     handle_get_assignments,
     handle_add_split,
@@ -101,6 +100,7 @@ def hole_viewer(course, hole_number):
 
     settings = _get_settings()
     try:
+        from .renderer import render_hole_svg
         svg_content = render_hole_svg(course, hole_number, settings=settings)
     except Exception:
         log.exception("cartographer: failed to render hole %d for %s", hole_number, course)
@@ -145,6 +145,7 @@ def course_gallery(course):
         svg = ""
         if hole_key in holes_data:
             try:
+                from .renderer import render_hole_svg
                 svg = render_hole_svg(course, h, settings=settings)
             except Exception:
                 log.exception("cartographer: failed to render hole %d for %s", h, course)
