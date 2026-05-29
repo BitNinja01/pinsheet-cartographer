@@ -18,15 +18,15 @@ from PIL import Image
 from shapely.geometry import Polygon, LineString
 from pypdf import PdfWriter, PdfReader, Transformation
 
-from cartographer.data import load_courses_geo
-from cartographer.geometry import (
+from .data import load_courses_geo
+from .geometry import (
     project_course, fit_hole, smooth_hole_geometry, chaikin_smooth, chaikin_smooth_open,
     get_green_centroid, get_green_rotation, compute_yardage_arcs,
     compute_pixels_per_yard_from_geometry,
 )
-from cartographer.renderer import render_hole, render_green, render_course_overview
-from cartographer.elevation import get_course_dem, compute_elevation_shading, compute_contours
-from cartographer.layout import (
+from .renderer import render_hole, render_green, render_course_overview
+from .elevation import get_course_dem, compute_elevation_shading, compute_contours
+from .layout import (
     compose_sheet, compose_front_page, compose_back_page, compose_chart_page,
     compose_notes_page, render_hole_page, render_bottom_slots,
     flip_page_svg, PAGE_W, PAGE_CONTENT_H, SLOT_H, PRINTABLE_W, MARGIN

@@ -21,7 +21,12 @@
                 <td>{{ c.name }}</td>
                 <td>{{ c.hole_count }}</td>
                 <td>{{ c.tagged_at if c.tagged_at else '&mdash;'|safe }}</td>
-                <td><a href="/plugins/cartographer/{{ c.name }}/gallery" class="ps-btn ps-btn--ghost">View</a></td>
+                <td>
+                    <a href="/plugins/cartographer/{{ c.name }}/gallery" class="ps-btn ps-btn--ghost">View</a>
+                    {% if c.has_osm %}
+                    <a href="/plugins/cartographer/{{ c.name }}/tag" class="ps-btn ps-btn--ghost">Tag</a>
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
         </tbody>

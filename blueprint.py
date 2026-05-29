@@ -2,16 +2,26 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import quote
 
 from flask import (
     Blueprint,
     current_app,
     g,
     render_template,
+    request,
 )
 
-from cartographer.data import load_courses_geo
-from cartographer.renderer import render_hole_svg
+from .data import get_osm_path, load_courses_geo
+from .renderer import render_hole_svg
+from .tagger.server import (
+    handle_get_assignments,
+    handle_add_split,
+    handle_delete_split,
+    handle_get_features,
+    handle_get_splits,
+    handle_save,
+)
 
 log = logging.getLogger("pinsheet")
 
@@ -45,6 +55,7 @@ def course_picker():
             "hole_count": len(holes),
             "tagged_at": scale.get("tagged_at", ""),
             "feature_count": scale.get("feature_count", 0),
+            "has_osm": get_osm_path(name).exists(),
         })
     return render_template(
         "course_picker.html",
@@ -148,3 +159,48 @@ def course_gallery(course):
         current_page="cartographer",
         settings=getattr(g, "settings", {}),
     )
+
+
+@bp.route("/<string:course>/tag")
+def tagger_ui(course):
+    osm_path = get_osm_path(course)
+    has_osm = osm_path.exists()
+    return render_template(
+        "tagger.html",
+        course_name=course,
+        course_encoded=quote(course),
+        has_osm=has_osm,
+        error=None if has_osm else f'No OSM data for "{course}".',
+        current_page="cartographer",
+        settings=getattr(g, "settings", {}),
+    )
+
+
+@bp.route("/<string:course>/tag/api/features")
+def tagger_api_features(course):
+    return handle_get_features(course)
+
+
+@bp.route("/<string:course>/tag/api/save", methods=["POST"])
+def tagger_api_save(course):
+    return handle_save(course, request.get_json())
+
+
+@bp.route("/<string:course>/tag/api/splits")
+def tagger_api_get_splits(course):
+    return handle_get_splits(course)
+
+
+@bp.route("/<string:course>/tag/api/splits", methods=["POST"])
+def tagger_api_add_split(course):
+    return handle_add_split(course, request.get_json())
+
+
+@bp.route("/<string:course>/tag/api/splits/<int:split_id>", methods=["DELETE"])
+def tagger_api_delete_split(course, split_id):
+    return handle_delete_split(course, split_id)
+
+
+@bp.route("/<string:course>/tag/api/assignments")
+def tagger_api_assignments(course):
+    return handle_get_assignments(course)

@@ -1,403 +1,25 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cartographer — Course Tagger</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/@turf/turf@7/turf.min.js"></script>
-  <style>
-    @font-face {
-      font-family: 'JetBrains Mono';
-      src: url('../fonts/JetBrainsMono/JetBrainsMonoNLNerdFontMono-Regular.ttf') format('truetype');
-      font-weight: 400;
-      font-style: normal;
-    }
-    @font-face {
-      font-family: 'JetBrains Mono';
-      src: url('../fonts/JetBrainsMono/JetBrainsMonoNLNerdFontMono-Medium.ttf') format('truetype');
-      font-weight: 500;
-      font-style: normal;
-    }
-    @font-face {
-      font-family: 'JetBrains Mono';
-      src: url('../fonts/JetBrainsMono/JetBrainsMonoNLNerdFontMono-SemiBold.ttf') format('truetype');
-      font-weight: 600;
-      font-style: normal;
-    }
-    @font-face {
-      font-family: 'JetBrains Mono';
-      src: url('../fonts/JetBrainsMono/JetBrainsMonoNLNerdFontMono-Bold.ttf') format('truetype');
-      font-weight: 700;
-      font-style: normal;
-    }
+{% extends "base.html" %}
+{% block content %}
+<style>
+.ps-layout { display: flex; height: 100vh; }
+.ps-sidebar { display: none; }
+.ps-main { padding: 0; width: 100%; max-width: none; }
+body { margin: 0; overflow: hidden; }
+.tagger-error { padding: 12px; margin: 8px; border-radius: 4px; background: oklch(18% 0.06 25); border: 1px solid oklch(64% 0.20 25); color: oklch(64% 0.20 25); font-size: 14px; }
+</style>
 
-    :root {
-      --bg:      oklch(14% 0.010 240);
-      --surface: oklch(18% 0.012 240);
-      --surface-elevated: oklch(22% 0.014 240);
-      --fg:      oklch(94% 0.006 240);
-      --muted:   oklch(64% 0.010 240);
-      --border:  oklch(32% 0.015 240);
-      --accent:  oklch(68% 0.16 145);
-      --accent-hover: oklch(72% 0.18 145);
-      --danger: oklch(64% 0.20 25);
+<script>
+var COURSE_NAME = "{{ course_name|e }}";
+var API_BASE = "/plugins/cartographer/{{ course_encoded }}" + "/tag/api";
+</script>
 
-      --font-body: 'JetBrains Mono', ui-monospace, Menlo, monospace;
-      --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    
-    body {
-      font-family: var(--font-body);
-      display: flex;
-      height: 100vh;
-      background: var(--bg);
-      color: var(--fg);
-      font-variant-numeric: tabular-nums;
-    }
-
-    #map {
-      flex: 1;
-      background: var(--surface);
-    }
-
-    #map .leaflet-tile-pane {
-      filter: grayscale(1);
-    }
-
-    #sidebar {
-      width: 360px;
-      background: var(--surface);
-      display: flex;
-      flex-direction: column;
-      border-left: 1px solid var(--border);
-      overflow: hidden;
-    }
-
-    header {
-      padding: 20px 20px 16px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-    }
-
-    h1 {
-      font-size: 15px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      color: var(--fg);
-      font-family: var(--font-body);
-    }
-
-    .section-label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      font-weight: 600;
-      color: var(--muted);
-      padding: 16px 20px 10px;
-      font-family: var(--font-mono);
-    }
-
-    #hole-selector {
-      padding: 12px 20px 16px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    #hole-label {
-      font-size: 13px;
-      color: var(--muted);
-      flex: 1;
-      font-family: var(--font-mono);
-    }
-
-    .hole-nav {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    #btn-prev-hole, #btn-next-hole {
-      background: var(--surface-elevated);
-      color: var(--muted);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      padding: 6px 10px;
-      transition: all 0.15s;
-      font-family: var(--font-mono);
-    }
-
-    #btn-prev-hole:hover, #btn-next-hole:hover {
-      background: var(--border);
-      color: var(--fg);
-      border-color: var(--muted);
-    }
-
-    #current-hole {
-      font-size: 24px;
-      font-weight: 700;
-      color: var(--accent);
-      min-width: 36px;
-      text-align: center;
-      font-family: var(--font-mono);
-    }
-
-    .invalid { color: var(--muted) !important; }
-
-    .type-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 600;
-      color: white;
-      font-family: var(--font-mono);
-      text-transform: lowercase;
-    }
-
-    .type-fairway { background: oklch(58% 0.14 145); }
-    .type-green { background: oklch(48% 0.12 165); }
-    .type-bunker { background: oklch(54% 0.08 60); }
-    .type-water { background: oklch(58% 0.16 240); }
-    .type-rough { background: oklch(52% 0.12 140); }
-    .type-tee { background: oklch(48% 0.02 240); }
-    .type-path { background: oklch(64% 0.14 80); }
-
-    #feature-list {
-      flex: 1;
-      overflow-y: auto;
-      padding: 8px;
-    }
-
-    .feature-item {
-      padding: 12px;
-      margin-bottom: 2px;
-      border-radius: 6px;
-      background: var(--surface-elevated);
-      cursor: pointer;
-      font-size: 13px;
-      border: 1px solid transparent;
-      transition: all 0.15s;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-family: var(--font-mono);
-    }
-
-    .feature-item:hover {
-      background: var(--border);
-      border-color: var(--muted);
-    }
-
-    .feature-meta {
-      color: var(--muted);
-      font-size: 12px;
-      margin-left: auto;
-    }
-
-    #controls {
-      padding: 20px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      background: var(--surface);
-    }
-
-    button {
-      padding: 12px 16px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-family: var(--font-mono);
-      font-size: 13px;
-      font-weight: 600;
-      transition: all 0.15s;
-      letter-spacing: -0.01em;
-    }
-
-    .hidden {
-      display: none !important;
-    }
-
-    #btn-split-mode {
-      background: var(--surface-elevated);
-      color: var(--muted);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      cursor: pointer;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      font-weight: 600;
-      padding: 8px 14px;
-      transition: all 0.15s;
-    }
-
-    #btn-split-mode:hover {
-      background: var(--border);
-      color: var(--fg);
-    }
-
-    #btn-split-mode.active {
-      background: var(--danger);
-      color: white;
-      border-color: var(--danger);
-    }
-
-    .split-line {
-      stroke-dasharray: 8 4;
-    }
-
-    #btn-undo {
-      background: var(--surface-elevated);
-      color: var(--muted);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      cursor: pointer;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      font-weight: 600;
-      padding: 8px 14px;
-      transition: all 0.15s;
-    }
-    #btn-undo:hover:not(:disabled) {
-      background: var(--border);
-      color: var(--fg);
-    }
-    #btn-undo:disabled {
-      opacity: 0.3;
-      cursor: default;
-    }
-
-    #review-info {
-      padding: 12px 20px;
-      background: oklch(18% 0.06 240);
-      border: 1px solid oklch(48% 0.16 240);
-      border-radius: 6px;
-      margin: 0 20px 12px;
-      font-size: 12px;
-      color: oklch(94% 0.006 240);
-    }
-
-    #review-info strong {
-      color: oklch(48% 0.16 240);
-    }
-
-    .review-mode-dimmed {
-      opacity: 0.3;
-      pointer-events: none;
-    }
-
-    #btn-submit {
-      background: var(--accent);
-      color: var(--bg);
-      width: 100%;
-      padding: 12px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-family: var(--font-mono);
-      font-size: 13px;
-      font-weight: 600;
-      transition: all 0.15s;
-    }
-
-    #btn-submit:hover {
-      background: var(--accent-hover);
-    }
-
-    #review-actions {
-      display: flex;
-      gap: 8px;
-    }
-
-    #btn-back {
-      flex: 1;
-      padding: 12px;
-      background: var(--surface-elevated);
-      color: var(--muted);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      cursor: pointer;
-      font-family: var(--font-mono);
-      font-size: 13px;
-      font-weight: 600;
-      transition: all 0.15s;
-    }
-
-    #btn-back:hover {
-      background: var(--border);
-      color: var(--fg);
-    }
-
-    #btn-confirm {
-      flex: 1;
-      padding: 12px;
-      background: oklch(48% 0.16 240);
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-family: var(--font-mono);
-      font-size: 13px;
-      font-weight: 600;
-      transition: all 0.15s;
-    }
-
-    #btn-confirm:hover {
-      background: oklch(52% 0.18 240);
-    }
-
-    #assignment-toggles {
-      padding: 12px 20px 8px;
-      display: flex;
-      gap: 8px;
-    }
-
-    .toggle-btn {
-      flex: 1;
-      padding: 8px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      font-weight: 600;
-      border: 1px solid var(--border);
-      background: var(--surface-elevated);
-      color: var(--muted);
-      transition: all 0.15s;
-    }
-
-    .toggle-btn:hover {
-      border-color: var(--muted);
-      color: var(--fg);
-    }
-
-    .toggle-btn.active {
-      background: var(--accent);
-      color: var(--bg);
-      border-color: var(--accent);
-    }
-
-    #btn-remove-mode.active {
-      background: var(--danger);
-      color: white;
-      border-color: var(--danger);
-    }
-  </style>
-</head>
-<body>
 <div id="map"></div>
 <div id="sidebar">
   <header>
     <h1 id="course-title"></h1>
+    {% if error %}
+    <div class="tagger-error">{{ error }}</div>
+    {% endif %}
   </header>
 
   <div id="hole-selector">
@@ -427,6 +49,10 @@
     </div>
   </div>
 </div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@turf/turf@7/turf.min.js"></script>
 
 <script>
   const map = L.map('map');
@@ -532,7 +158,7 @@
   };
 
   function addSplitLine(p1, p2) {
-    fetch('/api/splits', {
+    fetch(API_BASE + '/splits', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify([[p1.lat, p1.lng], [p2.lat, p2.lng]]),
@@ -652,7 +278,7 @@
   }
 
   function refreshFeatures() {
-    fetch('/api/features')
+    fetch(API_BASE + '/features')
       .then(r => r.json())
       .then(data => {
         Object.values(layers).forEach(l => map.removeLayer(l));
@@ -704,7 +330,7 @@
         }).addTo(map);
         allFeatures = data.features;
         renderFeatureList(allFeatures);
-        fetch('/api/splits')
+        fetch(API_BASE + '/splits')
           .then(r => r.json())
           .then(data => {
             clearSplitMarkers();
@@ -856,7 +482,7 @@
     if (undoStack.length === 0) return;
     const action = undoStack.pop();
     if (action.type === 'split') {
-      fetch(`/api/splits/${action.splitId}`, {method: 'DELETE'})
+      fetch(API_BASE + '/splits/' + action.splitId, {method: 'DELETE'})
         .then(r => r.json())
         .then(data => {
           if (data.status === 'ok') {
@@ -894,7 +520,7 @@
   };
 
   // Load existing assignments from saved data (survives page reload)
-  fetch('/api/assignments')
+  fetch(API_BASE + '/assignments')
     .then(r => r.json())
     .then(assignments => {
       Object.entries(assignments).forEach(([id, hole]) => {
@@ -906,7 +532,7 @@
       refreshFeatureStyles();
     });
 
-  fetch('/api/features')
+  fetch(API_BASE + '/features')
     .then(r => r.json())
     .then(data => {
       document.getElementById('course-title').textContent = data.course_name || 'Cartographer';
@@ -1027,7 +653,7 @@
     for (let h = 1; h <= 18; h++) {
       holes[String(h)] = {fairway:[], green:[], bunkers:[], tee_boxes:{}, water:[], waterways:[], paths:[], rough_boundary:[]};
     }
-    fetch('/api/features').then(r => r.json()).then(data => {
+    fetch(API_BASE + '/features').then(r => r.json()).then(data => {
       data.features.forEach(f => {
         const id = f.properties.osm_id;
         const geom = f.geometry;
@@ -1074,7 +700,7 @@
         });
       });
 
-      fetch('/api/save', {
+      fetch(API_BASE + '/save', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({scale: {pixels_per_yard: 1.0}, holes}),
@@ -1084,5 +710,4 @@
     });
   };
 </script>
-</body>
-</html>
+{% endblock %}

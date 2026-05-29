@@ -1,14 +1,10 @@
-"""Flask server for the cartographer visual tagging UI."""
+"""Route handler functions for the cartographer visual tagging UI."""
 from __future__ import annotations
 
-import threading
-import webbrowser
-from pathlib import Path
+from flask import jsonify
 
-from flask import Flask, jsonify, request, send_from_directory
-
-from cartographer.data import get_osm_path, load_courses_geo_raw, save_courses_geo
-from cartographer.osm import parse_osm_file, fetch_osm_features
+from ..data import get_osm_path, load_courses_geo_raw, save_courses_geo
+from ..osm import parse_osm_file
 
 from shapely.geometry import LineString, Polygon, MultiPolygon, Point
 from shapely.ops import split as shapely_split
@@ -142,21 +138,29 @@ def _derive_assignments(holes: dict, expanded_features: list[dict]) -> dict:
     return assignments
 
 
-_STATIC_DIR = Path(__file__).parent / "static"
+def _load_split_config(course_name: str) -> dict:
+    """Load split lines from saved geo data in config format.
 
-
-def start_tagger(course_name: str, osm_path: Path) -> threading.Event:
-    """Start the tagger with a pre-resolved .osm file. No input().
-
-    Returns a threading.Event that is set when the tagger saves or shuts down.
-    The caller can poll this event to detect completion.
+    Returns: {split_id: ((lat1, lon1), (lat2, lon2))}
     """
-    features = parse_osm_file(osm_path)
-    existing_geo = load_courses_geo_raw().get(course_name, {})
+    existing = load_courses_geo_raw().get(course_name, {})
+    split_lines = existing.get("splits", {})
+    return {
+        int(sid): ((pts[0][0], pts[0][1]), (pts[1][0], pts[1][1]))
+        for sid, pts in split_lines.items()
+    }
 
-    # Compute map bounds from golf features only (fairway, green, bunker, tee).
-    # Excludes water and paths which may be huge (rivers, long cart paths) and
-    # would unnecessarily zoom the view out.
+
+def handle_get_features(course_name: str):
+    """Return parsed OSM features as GeoJSON for Leaflet."""
+    osm_path = get_osm_path(course_name)
+    if not osm_path.exists():
+        return jsonify({"type": "FeatureCollection", "features": [], "course_name": course_name, "bounds": None})
+
+    features = parse_osm_file(osm_path)
+    split_config = _load_split_config(course_name)
+    _apply_splits(features, split_config)
+
     golf_types = {"fairway", "green", "bunker", "tee"}
     lats, lons = [], []
     for f in features:
@@ -174,184 +178,132 @@ def start_tagger(course_name: str, osm_path: Path) -> threading.Event:
         if lats else None
     )
 
-    app = Flask(__name__, static_folder=str(_STATIC_DIR))
-    shutdown_event = threading.Event()
-
-    split_lines = existing_geo.get("splits", {})
-    app.config["split_lines"] = {
-        int(sid): ((pts[0][0], pts[0][1]), (pts[1][0], pts[1][1]))
-        for sid, pts in split_lines.items()
-    }
-    _apply_splits(features, app.config["split_lines"])
-
-    @app.route("/")
-    def index():
-        return send_from_directory(_STATIC_DIR, "index.html")
-
-    @app.route("/api/features")
-    def get_features():
-        """Return parsed OSM features as GeoJSON for Leaflet.
-
-        Split features are expanded into sub-features with synthetic IDs
-        and split_group property. Course-wide features are tagged."""
-        expanded = _expand_split_features(features)
-        geojson_features = []
-        for f in expanded:
-            props = {
-                "osm_id": f["osm_id"],
-                "type": f["type"],
-                "tags": f.get("tags", {}),
-            }
-            if f.get("split_group"):
-                props["split_group"] = f["split_group"]
-
-            if f["is_point"]:
+    expanded = _expand_split_features(features)
+    geojson_features = []
+    for f in expanded:
+        props = {
+            "osm_id": f["osm_id"],
+            "type": f["type"],
+            "tags": f.get("tags", {}),
+        }
+        if f.get("split_group"):
+            props["split_group"] = f["split_group"]
+        if f["is_point"]:
+            geojson_features.append({
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [f["geometry"][1], f["geometry"][0]]},
+                "properties": props,
+            })
+        else:
+            coords = [[pt[1], pt[0]] for pt in f["geometry"]]
+            if f["type"] in ("path", "waterway"):
                 geojson_features.append({
                     "type": "Feature",
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [f["geometry"][1], f["geometry"][0]],
-                    },
+                    "geometry": {"type": "LineString", "coordinates": coords},
                     "properties": props,
                 })
             else:
-                coords = [[pt[1], pt[0]] for pt in f["geometry"]]
-                if f["type"] in ("path", "waterway"):
-                    geojson_features.append({
-                        "type": "Feature",
-                        "geometry": {"type": "LineString", "coordinates": coords},
-                        "properties": props,
-                    })
-                else:
-                    geojson_features.append({
-                        "type": "Feature",
-                        "geometry": {"type": "Polygon", "coordinates": [coords]},
-                        "properties": props,
-                    })
-        return jsonify({
-            "type": "FeatureCollection",
-            "features": geojson_features,
-            "course_name": course_name,
-            "bounds": bounds,
+                geojson_features.append({
+                    "type": "Feature",
+                    "geometry": {"type": "Polygon", "coordinates": [coords]},
+                    "properties": props,
+                })
+    return jsonify({
+        "type": "FeatureCollection",
+        "features": geojson_features,
+        "course_name": course_name,
+        "bounds": bounds,
+    })
+
+
+def handle_save(course_name: str, request_data: dict):
+    """Save tagged data to courses_geo.json."""
+    all_geo = load_courses_geo_raw()
+    existing = all_geo.get(course_name, {})
+    split_lines = existing.get("splits", {})
+
+    course_data = request_data
+    course_data["splits"] = split_lines
+    all_geo[course_name] = course_data
+    save_courses_geo(all_geo)
+    return jsonify({"status": "ok"})
+
+
+def handle_get_splits(course_name: str):
+    """Return split lines as GeoJSON FeatureCollection."""
+    split_lines = _load_split_config(course_name)
+    split_features = []
+    for split_id, (p1, p2) in split_lines.items():
+        split_features.append({
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [[p1[1], p1[0]], [p2[1], p2[0]]],
+            },
+            "properties": {"split_id": split_id},
         })
-
-    @app.route("/api/save", methods=["POST"])
-    def save():
-        """Receive tagged data from the UI and write courses_geo.json."""
-        data = request.get_json()
-        all_geo = load_courses_geo_raw()
-        course_data = data
-
-        course_data["splits"] = {
-            str(sid): [[p1[0], p1[1]], [p2[0], p2[1]]]
-            for sid, (p1, p2) in app.config["split_lines"].items()
-        }
-
-        all_geo[course_name] = course_data
-        save_courses_geo(all_geo)
-        shutdown_event.set()
-        return jsonify({"status": "ok"})
-
-    @app.route("/api/shutdown", methods=["POST"])
-    def shutdown():
-        shutdown_event.set()
-        return jsonify({"status": "shutting down"})
-
-    @app.route("/api/splits", methods=["GET"])
-    def get_splits():
-        """Return split lines as GeoJSON FeatureCollection."""
-        split_features = []
-        for split_id, (p1, p2) in app.config["split_lines"].items():
-            split_features.append({
-                "type": "Feature",
-                "geometry": {
-                    "type": "LineString",
-                    "coordinates": [[p1[1], p1[0]], [p2[1], p2[0]]],
-                },
-                "properties": {"split_id": split_id},
-            })
-        return jsonify({"type": "FeatureCollection", "features": split_features})
-
-    @app.route("/api/splits", methods=["POST"])
-    def add_split():
-        """Add a split line. Body: [[lat1,lon1],[lat2,lon2]]."""
-        data = request.get_json()
-        p1 = (data[0][0], data[0][1])
-        p2 = (data[1][0], data[1][1])
-
-        for f in features:
-            f.pop("_split_pieces", None)
-
-        max_id = max(app.config["split_lines"].keys()) if app.config["split_lines"] else 0
-        new_id = max_id + 1
-        app.config["split_lines"][new_id] = (p1, p2)
-        affected = _apply_splits(features, app.config["split_lines"])
-
-        affected_ids = [
-            f["osm_id"] for f in affected if "_split_pieces" in f
-        ]
-        return jsonify({"split_id": new_id, "affected": affected_ids})
-
-    @app.route("/api/splits/<int:split_id>", methods=["DELETE"])
-    def delete_split(split_id):
-        """Remove a split line and re-merge sub-features."""
-        if split_id not in app.config["split_lines"]:
-            return jsonify({"error": "not found"}), 404
-
-        del app.config["split_lines"][split_id]
-
-        for f in features:
-            f.pop("_split_pieces", None)
-        _apply_splits(features, app.config["split_lines"])
-
-        return jsonify({"status": "ok", "removed": split_id})
-
-    @app.route("/api/assignments")
-    def get_assignments():
-        """Return existing feature assignments derived from saved hole data."""
-        existing = load_courses_geo_raw().get(course_name, {})
-        holes = existing.get("holes", {})
-        expanded = _expand_split_features(features)
-        return jsonify(_derive_assignments(holes, expanded))
-
-    port = 5173
-    threading.Timer(0.8, lambda: webbrowser.open(f"http://localhost:{port}")).start()
-
-    server_thread = threading.Thread(
-        target=lambda: app.run(port=port, debug=False, use_reloader=False),
-        daemon=True,
-    )
-    server_thread.start()
-
-    return shutdown_event
+    return jsonify({"type": "FeatureCollection", "features": split_features})
 
 
-def run_tagger(course_name: str) -> None:
-    """CLI entry point. Resolves .osm file (with prompt/API fallback) then starts tagger.
+def handle_add_split(course_name: str, request_data: list):
+    """Add a split line. request_data: [[lat1,lon1],[lat2,lon2]]."""
+    p1 = (request_data[0][0], request_data[0][1])
+    p2 = (request_data[1][0], request_data[1][1])
 
-    Blocks until the tagger saves or shuts down.
-    """
     osm_path = get_osm_path(course_name)
+    features = parse_osm_file(osm_path)
 
-    if osm_path.exists():
-        print(f"  Loading cached .osm file: {osm_path}")
-    else:
-        answer = input(f"  No .osm file found for '{course_name}'. Fetch from OSM API? (y/n): ").strip().lower()
-        if answer != "y":
-            print("  To tag manually, download the .osm file from openstreetmap.org")
-            print(f"  and place it at: {osm_path}")
-            return
-        print("  Fetching from OSM API...")
-        try:
-            features = fetch_osm_features(course_name, osm_path)
-        except RuntimeError as e:
-            print(f"  Error: {e}")
-            return
+    all_geo = load_courses_geo_raw()
+    existing = all_geo.get(course_name, {})
+    split_lines = existing.get("splits", {})
+    split_config = {
+        int(sid): ((pts[0][0], pts[0][1]), (pts[1][0], pts[1][1]))
+        for sid, pts in split_lines.items()
+    }
 
-    print(f"\n  Opening cartographer tagger at http://localhost:5173")
-    print("  Press Save in the browser when done, or Ctrl+C to cancel.\n")
+    for f in features:
+        f.pop("_split_pieces", None)
 
-    shutdown_event = start_tagger(course_name, osm_path)
-    shutdown_event.wait()
-    print(f"\n  Saved geometry for '{course_name}'.")
-    print(f"  Geometry written to: data/plugins/cartographer/courses_geo.json")
+    max_id = max(split_config.keys()) if split_config else 0
+    new_id = max_id + 1
+    split_config[new_id] = (p1, p2)
+    _apply_splits(features, split_config)
+
+    affected_ids = [f["osm_id"] for f in features if "_split_pieces" in f]
+
+    split_lines[str(new_id)] = [[p1[0], p1[1]], [p2[0], p2[1]]]
+    existing["splits"] = split_lines
+    all_geo[course_name] = existing
+    save_courses_geo(all_geo)
+
+    return jsonify({"split_id": new_id, "affected": affected_ids})
+
+
+def handle_delete_split(course_name: str, split_id: int):
+    """Remove a split line."""
+    all_geo = load_courses_geo_raw()
+    existing = all_geo.get(course_name, {})
+    split_lines = existing.get("splits", {})
+
+    if str(split_id) not in split_lines:
+        return jsonify({"error": "not found"}), 404
+
+    del split_lines[str(split_id)]
+    existing["splits"] = split_lines
+    all_geo[course_name] = existing
+    save_courses_geo(all_geo)
+
+    return jsonify({"status": "ok", "removed": split_id})
+
+
+def handle_get_assignments(course_name: str):
+    """Return existing feature assignments from saved hole data."""
+    existing = load_courses_geo_raw().get(course_name, {})
+    osm_path = get_osm_path(course_name)
+    if not osm_path.exists():
+        return jsonify({})
+    features = parse_osm_file(osm_path)
+
+    holes = existing.get("holes", {})
+    expanded = _expand_split_features(features)
+    return jsonify(_derive_assignments(holes, expanded))

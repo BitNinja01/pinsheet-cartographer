@@ -10,8 +10,8 @@ import math
 
 import svgwrite
 
-from cartographer.data import load_courses_geo
-from cartographer.geometry import (
+from .data import load_courses_geo
+from .geometry import (
     project_course, fit_hole, smooth_hole_geometry, chaikin_smooth,
     compute_pixels_per_yard_from_geometry, get_green_centroid,
     find_overview_rotation, opening_ring,

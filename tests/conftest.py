@@ -4,8 +4,22 @@ Provides synthetic factories that produce data in the same JSON shape
 as the real PinSheet data, without depending on OSM API access or
 real round data files.
 """
+import importlib.util
+import sys
+from pathlib import Path
+
 import math
 import pytest
+
+
+# -- Module alias: allow 'import cartographer' regardless of plugin directory name
+_plugin_dir = Path(__file__).resolve().parent.parent
+if _plugin_dir.name != "cartographer":
+    _init_path = str(_plugin_dir / "__init__.py")
+    _spec = importlib.util.spec_from_file_location("cartographer", _init_path)
+    _mod = importlib.util.module_from_spec(_spec)
+    sys.modules["cartographer"] = _mod
+    _spec.loader.exec_module(_mod)
 
 
 # ---------------------------------------------------------------------------

@@ -117,7 +117,7 @@ def get_course_dem(
 ) -> Path | None:
     """Download/cache the 1m DEM covering all green bounding boxes.
     Returns path to cached GeoTIFF or None if unavailable."""
-    from cartographer.data import get_dem_path
+    from .data import get_dem_path
 
     cache_path = get_dem_path(course_name)
     if cache_path.exists():
@@ -478,7 +478,7 @@ def compute_all_green_contours(course_name: str, holes_geo: dict) -> dict:
     Returns {hole_num: {"contours": [{"path": [[lat, lon], ...], "z": ...}, ...]}}
     or empty dict if DEM is unavailable.
     """
-    from cartographer.data import get_contours_cache_path
+    from .data import get_contours_cache_path
     import json
 
     cache_path = get_contours_cache_path(course_name)
@@ -504,7 +504,7 @@ def compute_all_green_contours(course_name: str, holes_geo: dict) -> dict:
 
 def load_contours_cache(course_name: str) -> dict:
     """Load cached contours. Returns {} on cache miss."""
-    from cartographer.data import get_contours_cache_path
+    from .data import get_contours_cache_path
     import json
 
     path = get_contours_cache_path(course_name)

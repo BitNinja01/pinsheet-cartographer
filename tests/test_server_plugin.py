@@ -213,3 +213,96 @@ class TestDataDirResolution:
             assert result.exists()
         finally:
             carto_data._server_data_dir = original
+
+
+def _write_test_osm(data_dir, course_name):
+    """Write a minimal .osm file with one way for testing."""
+    import pathlib
+    osm_dir = data_dir / "plugins" / "cartographer" / "osm"
+    osm_dir.mkdir(parents=True, exist_ok=True)
+    osm_path = osm_dir / f"{course_name}.osm"
+    osm_path.write_text("""<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6">
+  <bounds minlat="47.60" minlon="-122.34" maxlat="47.62" maxlon="-122.32"/>
+  <way id="1" visible="true">
+    <nd ref="10"/>
+    <nd ref="11"/>
+    <nd ref="12"/>
+    <nd ref="10"/>
+    <tag k="golf" v="fairway"/>
+  </way>
+  <node id="10" visible="true" lat="47.606" lon="-122.330"/>
+  <node id="11" visible="true" lat="47.607" lon="-122.328"/>
+  <node id="12" visible="true" lat="47.606" lon="-122.328"/>
+</osm>""")
+
+
+class TestTaggerRoutes:
+    def test_tagger_page_no_osm_returns_200(self, cartographer_app):
+        """Tagger page renders even without OSM data (shows error message)."""
+        with cartographer_app.test_client() as client:
+            resp = client.get("/plugins/cartographer/NoSuchCourse/tag")
+            assert resp.status_code == 200
+            assert b"No OSM data" in resp.data
+
+    def test_tagger_page_with_osm_includes_script(self, cartographer_app):
+        data_dir = cartographer_app.config["DATA_DIR"]
+        _write_test_osm(data_dir, "Test GC")
+        with cartographer_app.test_client() as client:
+            resp = client.get("/plugins/cartographer/Test GC/tag")
+            assert resp.status_code == 200
+            assert b"API_BASE" in resp.data
+
+    def test_tagger_api_features_no_osm(self, cartographer_app):
+        with cartographer_app.test_client() as client:
+            resp = client.get("/plugins/cartographer/NoSuchCourse/tag/api/features")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["type"] == "FeatureCollection"
+            assert data["features"] == []
+
+    def test_tagger_api_features_with_osm(self, cartographer_app):
+        data_dir = cartographer_app.config["DATA_DIR"]
+        _write_test_osm(data_dir, "Test GC")
+        with cartographer_app.test_client() as client:
+            resp = client.get("/plugins/cartographer/Test GC/tag/api/features")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["type"] == "FeatureCollection"
+            assert len(data["features"]) > 0
+
+    def test_tagger_api_save_roundtrip(self, cartographer_app):
+        data_dir = cartographer_app.config["DATA_DIR"]
+        _write_test_osm(data_dir, "Test GC")
+        with cartographer_app.test_client() as client:
+            save_resp = client.post(
+                "/plugins/cartographer/Test GC/tag/api/save",
+                json={"scale": {"pixels_per_yard": 1.0}, "holes": {}},
+            )
+            assert save_resp.status_code == 200
+            assert save_resp.get_json()["status"] == "ok"
+
+    def test_tagger_api_splits_no_osm(self, cartographer_app):
+        with cartographer_app.test_client() as client:
+            resp = client.get("/plugins/cartographer/NoSuchCourse/tag/api/splits")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["type"] == "FeatureCollection"
+            assert data["features"] == []
+
+    def test_tagger_api_splits_add_and_list(self, cartographer_app):
+        data_dir = cartographer_app.config["DATA_DIR"]
+        _write_test_osm(data_dir, "Test GC")
+        with cartographer_app.test_client() as client:
+            add_resp = client.post(
+                "/plugins/cartographer/Test GC/tag/api/splits",
+                json=[[47.606, -122.330], [47.607, -122.328]],
+            )
+            assert add_resp.status_code == 200
+            data = add_resp.get_json()
+            assert "split_id" in data
+
+            list_resp = client.get("/plugins/cartographer/Test GC/tag/api/splits")
+            assert list_resp.status_code == 200
+            list_data = list_resp.get_json()
+            assert len(list_data["features"]) == 1

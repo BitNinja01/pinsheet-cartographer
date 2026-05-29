@@ -57,7 +57,7 @@ def _create_tables(db_path: Path) -> None:
 
 def register(app):
     # 1. Set server-aware data directory
-    import cartographer.data as carto_data
+    from . import data as carto_data
     carto_data._server_data_dir = Path(app.config["DATA_DIR"]) / "plugins" / "cartographer"
     carto_data._server_data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -75,7 +75,7 @@ def register(app):
 
     # 4. Register Blueprint
     try:
-        from cartographer.blueprint import bp
+        from .blueprint import bp
         app.register_blueprint(bp)
     except ImportError:
         log.warning("cartographer: blueprint not found, web routes unavailable")
