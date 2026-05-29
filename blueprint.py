@@ -323,9 +323,9 @@ def pdf_export(course):
 def pdf_generate(course):
     try:
         return _do_pdf_generate(course)
-    except Exception:
+    except Exception as exc:
         log.exception("cartographer: pdf_generate failed for %s", course)
-        return jsonify({"status": "error", "error": "Server error. Check logs."}), 500
+        return jsonify({"status": "error", "error": f"Server error: {type(exc).__name__}: {exc}"}), 500
 
 
 def _do_pdf_generate(course):
