@@ -526,3 +526,37 @@ def pdf_download(course):
         as_attachment=True,
         download_name=f"{safe}_yardage_book.zip",
     )
+
+
+@bp.route("/<string:course>/pdf", methods=["DELETE"])
+def pdf_delete(course):
+    from .data import _get_plugin_data_dir
+    safe = course.lower().replace(" ", "_").replace("'", "").replace('"', "")
+    data_dir = _get_plugin_data_dir()
+
+    zip_path = data_dir / "yardage_books" / safe / f"{safe}.zip"
+    if zip_path.exists():
+        zip_path.unlink()
+
+    booklets_dir = data_dir / "yardage_books" / safe / "booklets"
+    if booklets_dir.exists():
+        import shutil
+        shutil.rmtree(booklets_dir)
+
+    sheets_dir = data_dir / "yardage_books" / safe / "sheets"
+    if sheets_dir.exists():
+        import shutil
+        shutil.rmtree(sheets_dir)
+
+    try:
+        _db = sqlite3.connect(str(current_app.config["DB_PATH"]))
+        _db.execute(
+            "UPDATE plugin_cartographer_geometry SET pdf_generated_at = NULL WHERE course_name = ?",
+            (course,),
+        )
+        _db.commit()
+        _db.close()
+    except Exception:
+        log.warning("cartographer: failed to clear pdf_generated_at", exc_info=True)
+
+    return jsonify({"status": "ok"})

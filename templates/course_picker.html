@@ -4,6 +4,16 @@
     <h1 class="ps-h1">Course Maps</h1>
 </div>
 
+<style>
+.carto-pdf-col { width: 160px; }
+.carto-pdf-col .ps-btn { display: block; width: 100%; text-align: center; box-sizing: border-box; }
+.carto-actions-col { width: 220px; }
+.carto-actions-col .ps-btn { box-sizing: border-box; }
+.carto-actions-col .ps-btn + .ps-btn { margin-left: 6px; }
+.carto-delete-col { width: 60px; text-align: center; }
+.carto-delete-col .ps-btn { color: var(--ps-warn); }
+</style>
+
 {% if courses %}
 <div class="ps-card" style="margin-top: 24px;">
     <table class="ps-table" style="width: 100%;">
@@ -12,8 +22,9 @@
                 <th>Course</th>
                 <th>Holes</th>
                 <th>Last Generated</th>
-                <th>PDF</th>
-                <th></th>
+                <th class="carto-pdf-col">PDF</th>
+                <th class="carto-actions-col">Actions</th>
+                <th class="carto-delete-col"></th>
             </tr>
         </thead>
         <tbody>
@@ -22,7 +33,7 @@
                 <td>{{ c.name }}</td>
                 <td>{{ c.hole_count }}</td>
                 <td>{{ c.pdf_generated_at[:10] if c.pdf_generated_at else '&mdash;'|safe }}</td>
-                <td>
+                <td class="carto-pdf-col">
                     {% if c.pdf_status == 'fresh' %}
                     <a href="/plugins/cartographer/{{ c.name }}/pdf/download" class="ps-btn ps-btn--ghost">Download</a>
                     {% elif c.pdf_status == 'stale' %}
@@ -31,14 +42,16 @@
                     <a href="/plugins/cartographer/{{ c.name }}/pdf" class="ps-btn ps-btn--ghost">Generate PDF</a>
                     {% endif %}
                 </td>
-                <td>
-                    <a href="/plugins/cartographer/{{ c.name }}/gallery" class="ps-btn ps-btn--ghost">View</a>
+                <td class="carto-actions-col">
                     {% if c.has_osm %}
+                    <a href="/plugins/cartographer/{{ c.name }}/gallery" class="ps-btn ps-btn--ghost">View</a>
                     <a href="/plugins/cartographer/{{ c.name }}/tag" class="ps-btn ps-btn--ghost">Tag</a>
-                    {% else %}
+                    {% endif %}
                     <button class="ps-btn ps-btn--ghost upload-osm-btn" data-course="{{ c.name }}">Upload OSM</button>
                     <input type="file" accept=".osm" class="upload-osm-input" data-course="{{ c.name }}" style="display:none">
-                    {% endif %}
+                </td>
+                <td class="carto-delete-col">
+                    <button class="ps-btn ps-btn--ghost btn-delete-pdf" data-course="{{ c.name }}">Delete</button>
                 </td>
             </tr>
             {% endfor %}
@@ -84,6 +97,24 @@ document.querySelectorAll('.upload-osm-input').forEach(function(input) {
             btn.textContent = 'Network error';
             setTimeout(function() { btn.textContent = 'Upload OSM'; }, 3000);
         });
+    });
+});
+document.querySelectorAll('.btn-delete-pdf').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var course = this.getAttribute('data-course');
+        if (!confirm('Delete yardage book for "' + course + '"? This cannot be undone.')) return;
+        fetch('/plugins/cartographer/' + encodeURIComponent(course) + '/pdf', { method: 'DELETE' })
+            .then(function(r) {
+                if (r.ok) {
+                    location.reload();
+                } else {
+                    return r.json().then(function(data) {
+                        alert(data.error || 'Delete failed');
+                    });
+                }
+            }).catch(function() {
+                alert('Network error');
+            });
     });
 });
 </script>
