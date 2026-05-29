@@ -5,6 +5,7 @@ Provides hole viewer, course gallery, and course picker web pages.
 """
 from __future__ import annotations
 
+import importlib
 import logging
 import shutil
 import sqlite3
@@ -57,7 +58,7 @@ def _create_tables(db_path: Path) -> None:
 
 def register(app):
     # 1. Set server-aware data directory
-    from . import data as carto_data
+    carto_data = importlib.import_module(__name__ + ".data")
     carto_data._server_data_dir = Path(app.config["DATA_DIR"]) / "plugins" / "cartographer"
     carto_data._server_data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -75,7 +76,7 @@ def register(app):
 
     # 4. Register Blueprint
     try:
-        from .blueprint import bp
+        bp = importlib.import_module(__name__ + ".blueprint").bp
         app.register_blueprint(bp)
     except ImportError:
         log.warning("cartographer: blueprint not found, web routes unavailable")
@@ -101,7 +102,7 @@ def register(app):
 
 
 def unregister(app):
-    import cartographer.data as carto_data
+    carto_data = importlib.import_module(__name__ + ".data")
     carto_data._server_data_dir = None
     app.config.pop("plugins.cartographer.yardage_arcs", None)
     app.config.pop("plugins.cartographer.yardage_arc_distances", None)
