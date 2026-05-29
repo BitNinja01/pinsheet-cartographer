@@ -132,34 +132,59 @@
             }
             return r.json();
         }).then(function(data) {
-            var evtSource = new EventSource(window.location.href + '/stream/' + data.job_id);
+            var jobId = data.job_id;
+            var statusUrl = window.location.href + '/status/' + jobId;
+            var pollTimer = null;
+            var done = false;
+
+            function updateProgress(j) {
+                if (j.status === 'running') {
+                    var pct = Math.round(j.current / j.total * 100);
+                    progressFill.style.width = pct + '%';
+                    progressText.textContent = 'Sheet ' + Math.min(j.current, 20) + '/20';
+                    progressDetail.textContent = j.detail;
+                }
+            }
+
+            function finish(j) {
+                if (done) return;
+                done = true;
+                if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+                if (j.status === 'complete') {
+                    progress.style.display = 'none';
+                    result.style.display = 'block';
+                    document.getElementById('pdf-success').style.display = 'block';
+                    document.getElementById('download-link').href = '/plugins/cartographer/{{ course_encoded }}/pdf/download';
+                } else if (j.status === 'error') {
+                    showError(j.error || 'Generation failed');
+                }
+            }
+
+            var evtSource = new EventSource(window.location.href + '/stream/' + jobId);
             evtSource.addEventListener('progress', function(e) {
-                var d = JSON.parse(e.data);
-                var pct = Math.round(d.current / d.total * 100);
-                progressFill.style.width = pct + '%';
-                progressText.textContent = 'Sheet ' + Math.min(d.current, 20) + '/20';
+                try { updateProgress(JSON.parse(e.data)); } catch(_) {}
             });
             evtSource.addEventListener('status', function(e) {
-                progressDetail.textContent = JSON.parse(e.data);
+                try { progressDetail.textContent = JSON.parse(e.data); } catch(_) {}
             });
             evtSource.addEventListener('complete', function(e) {
                 evtSource.close();
-                progress.style.display = 'none';
-                result.style.display = 'block';
-                document.getElementById('pdf-success').style.display = 'block';
-                var d = JSON.parse(e.data);
-                document.getElementById('download-link').href = d.download_url;
+                finish({status: 'complete'});
             });
             evtSource.addEventListener('error', function(e) {
                 evtSource.close();
                 if (e.data && e.data !== '') {
-                    try { showError(JSON.parse(e.data)); return; } catch(_) {}
+                    try { finish(JSON.parse(e.data)); return; } catch(_) {}
                 }
-                fetch(window.location.href + '/status/' + data.job_id).then(function(r) { return r.json(); }).then(function(j) {
-                    if (j.status === 'error') { showError(j.error || 'Generation failed'); }
-                    else { showError('Connection lost. The server may still be working — check server logs.'); }
-                }).catch(function() { showError('Connection lost.'); });
             });
+
+            pollTimer = setInterval(function() {
+                if (done) { clearInterval(pollTimer); return; }
+                fetch(statusUrl).then(function(r) { return r.json(); }).then(function(j) {
+                    if (j.status === 'complete' || j.status === 'error') { finish(j); }
+                    else { updateProgress(j); }
+                }).catch(function() {});
+            }, 2000);
         }).catch(function(err) {
             showError('Network error: ' + err.message);
         });
