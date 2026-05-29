@@ -13,14 +13,6 @@ from flask import (
 )
 
 from .data import get_osm_path, load_courses_geo
-from .tagger.server import (
-    handle_get_assignments,
-    handle_add_split,
-    handle_delete_split,
-    handle_get_features,
-    handle_get_splits,
-    handle_save,
-)
 
 log = logging.getLogger("pinsheet")
 
@@ -179,29 +171,35 @@ def tagger_ui(course):
 
 @bp.route("/<string:course>/tag/api/features")
 def tagger_api_features(course):
+    from .tagger.server import handle_get_features
     return handle_get_features(course)
 
 
 @bp.route("/<string:course>/tag/api/save", methods=["POST"])
 def tagger_api_save(course):
+    from .tagger.server import handle_save
     return handle_save(course, request.get_json())
 
 
 @bp.route("/<string:course>/tag/api/splits")
 def tagger_api_get_splits(course):
+    from .tagger.server import handle_get_splits
     return handle_get_splits(course)
 
 
 @bp.route("/<string:course>/tag/api/splits", methods=["POST"])
 def tagger_api_add_split(course):
+    from .tagger.server import handle_add_split
     return handle_add_split(course, request.get_json())
 
 
 @bp.route("/<string:course>/tag/api/splits/<int:split_id>", methods=["DELETE"])
 def tagger_api_delete_split(course, split_id):
+    from .tagger.server import handle_delete_split
     return handle_delete_split(course, split_id)
 
 
 @bp.route("/<string:course>/tag/api/assignments")
 def tagger_api_assignments(course):
+    from .tagger.server import handle_get_assignments
     return handle_get_assignments(course)
