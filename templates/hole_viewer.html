@@ -8,7 +8,7 @@
 {% if error %}
 <div class="ps-card" style="margin-top: 24px; text-align: center;">
     <p style="color: var(--ps-warn);">{{ error }}</p>
-    <a href="/plugins/cartographer" class="ps-btn" style="margin-top: 16px;">Back to Courses</a>
+    <a href="/courses/{{ course_name }}" class="ps-btn" style="margin-top: 16px;">Back to Course</a>
 </div>
 {% else %}
 <div class="carto-hole-nav" style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px;">

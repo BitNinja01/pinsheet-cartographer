@@ -259,12 +259,7 @@ def register(app):
         (app._plugin_blocks.get("foot", "") + "\n" + _detail_actions_js).strip()
     )
 
-    # 8. Add nav link
-    app._plugin_nav.append({
-        "label": "Course Maps",
-        "url": "/plugins/cartographer",
-        "page_id": "cartographer",
-    })
+    # 8. Nav link removed — cartographer actions are on the core Courses pages
 
     # 9. Default settings
     app.config.setdefault("plugins.cartographer.yardage_arcs", True)
@@ -290,10 +285,5 @@ def unregister(app):
             r'<script[^>]*>.*?' + _re.escape(_FOOT_JS_MARKER) + r'.*?</script>',
             "", current_foot, flags=_re.DOTALL
         ).strip()
-
-    app._plugin_nav[:] = [
-        entry for entry in app._plugin_nav
-        if entry.get("page_id") != "cartographer"
-    ]
 
     app._plugin_course_actions.clear()

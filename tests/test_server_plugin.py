@@ -119,11 +119,6 @@ class TestCartographerRegistration:
         distances = cartographer_app.config.get("plugins.cartographer.yardage_arc_distances")
         assert distances == [100, 125, 150, 175, 200]
 
-    def test_register_adds_nav_item(self, cartographer_app):
-        nav = cartographer_app._plugin_nav
-        found = any(item["label"] == "Course Maps" for item in nav)
-        assert found
-
     def test_register_creates_db_table(self, cartographer_app):
         import sqlite3
         db = sqlite3.connect(str(cartographer_app.config["DB_PATH"]))
@@ -139,20 +134,11 @@ class TestCartographerRegistration:
 
 
 class TestCoursePicker:
-    def test_empty_no_courses(self, cartographer_app):
+    def test_redirects_to_courses(self, cartographer_app):
         with cartographer_app.test_client() as client:
             resp = client.get("/plugins/cartographer/")
-            assert resp.status_code == 200
-            assert b"No Courses" in resp.data or b"No courses" in resp.data
-
-    def test_lists_courses_with_geometry(self, cartographer_app):
-        _write_test_geo(cartographer_app.config["DATA_DIR"], "Test GC", {
-            "1": _make_simple_hole(1),
-        })
-        with cartographer_app.test_client() as client:
-            resp = client.get("/plugins/cartographer/")
-            assert resp.status_code == 200
-            assert b"Test GC" in resp.data
+            assert resp.status_code == 302
+            assert resp.location.endswith("/courses")
 
 
 class TestHoleViewer:
@@ -387,27 +373,12 @@ class TestPDFExport:
             resp = client.get("/plugins/cartographer/Test%20GC/pdf/download")
             assert resp.status_code == 404
 
-    def test_course_picker_shows_generate_button_without_pdf(self, cartographer_app):
-        holes = {"1": _make_simple_hole(1)}
-        _write_test_geo(cartographer_app.config["DATA_DIR"], "Test GC", holes)
+    def test_course_picker_redirects_without_pdf(self, cartographer_app):
         with cartographer_app.test_client() as client:
             resp = client.get("/plugins/cartographer/")
-            assert resp.status_code == 200
-            assert b"Generate PDF" in resp.data
+            assert resp.status_code == 302
 
-    def test_course_picker_shows_download_with_pdf(self, cartographer_app):
-        holes = {"1": _make_simple_hole(1)}
-        data_dir = cartographer_app.config["DATA_DIR"]
-        _write_test_geo(data_dir, "Test GC", holes)
-        import sqlite3
-        db = sqlite3.connect(str(cartographer_app.config["DB_PATH"]))
-        db.execute(
-            "INSERT INTO plugin_cartographer_geometry (user_id, course_name, pdf_generated_at) VALUES (?, ?, ?)",
-            (1, "Test GC", "2026-05-15T12:00:00+00:00"),
-        )
-        db.commit()
-        db.close()
+    def test_course_picker_redirects_with_pdf(self, cartographer_app):
         with cartographer_app.test_client() as client:
             resp = client.get("/plugins/cartographer/")
-            assert resp.status_code == 200
-            assert b"Download" in resp.data
+            assert resp.status_code == 302

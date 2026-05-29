@@ -16,10 +16,12 @@ from flask import (
     current_app,
     g,
     jsonify,
+    redirect,
     render_template,
     request,
     send_file,
     stream_with_context,
+    url_for,
 )
 from flask_login import current_user
 
@@ -69,60 +71,7 @@ def _get_settings():
 
 @bp.route("/")
 def course_picker():
-    courses_geo = load_courses_geo()
-    courses = []
-
-    try:
-        import sqlite3
-        _db = sqlite3.connect(str(current_app.config["DB_PATH"]))
-        _db.row_factory = sqlite3.Row
-        _server_names = {row["name"] for row in _db.execute("SELECT name FROM courses").fetchall()}
-        _db.close()
-    except Exception:
-        _server_names = set()
-
-    pdf_timestamps = {}
-    try:
-        _db2 = sqlite3.connect(str(current_app.config["DB_PATH"]))
-        _db2.row_factory = sqlite3.Row
-        for row in _db2.execute("SELECT course_name, pdf_generated_at FROM plugin_cartographer_geometry WHERE pdf_generated_at IS NOT NULL"):
-            pdf_timestamps[row["course_name"]] = row["pdf_generated_at"]
-        _db2.close()
-    except Exception:
-        pass
-
-    for name in sorted(set(_server_names) | set(courses_geo.keys())):
-        geo_data = courses_geo.get(name, {})
-        holes = geo_data.get("holes", {})
-        scale = geo_data.get("scale", {})
-        has_osm = get_osm_path(name).exists()
-
-        pdf_ts = pdf_timestamps.get(name)
-        if pdf_ts is None:
-            from .data import _get_plugin_data_dir as _pd
-            safe = name.lower().replace(" ", "_").replace("'", "").replace('"', "")
-            zip_path = _pd() / "yardage_books" / safe / f"{safe}.zip"
-            if zip_path.exists():
-                mtime = datetime.fromtimestamp(zip_path.stat().st_mtime, tz=timezone.utc)
-                pdf_ts = mtime.isoformat()
-
-        courses.append({
-            "name": name,
-            "hole_count": len(holes),
-            "tagged_at": scale.get("tagged_at", ""),
-            "feature_count": scale.get("feature_count", 0),
-            "has_osm": has_osm,
-            "has_geometry": bool(holes),
-            "pdf_generated_at": pdf_ts,
-            "pdf_status": "stale" if (ts := pdf_ts) and (datetime.now(timezone.utc) - datetime.fromisoformat(ts)).days >= 182 else "fresh" if ts else None,
-        })
-
-    return render_template(
-        "course_picker.html",
-        courses=courses,
-        current_page="cartographer",
-        settings=getattr(g, "settings", {}),
-    )
+    return redirect(url_for("course_list"))
 
 
 @bp.route("/<string:course>/hole/<int:hole_number>")

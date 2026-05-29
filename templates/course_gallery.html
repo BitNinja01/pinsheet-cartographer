@@ -2,13 +2,13 @@
 {% block content %}
 <div class="ps-topbar">
     <h1 class="ps-h1">{{ course_name }}</h1>
-    <a href="/plugins/cartographer" class="ps-btn ps-btn--ghost">All Courses</a>
+    <a href="/courses" class="ps-btn ps-btn--ghost">All Courses</a>
 </div>
 
 {% if error %}
 <div class="ps-card" style="margin-top: 24px; text-align: center;">
     <p style="color: var(--ps-warn);">{{ error }}</p>
-    <a href="/plugins/cartographer" class="ps-btn" style="margin-top: 16px;">Back to Courses</a>
+    <a href="/courses/{{ course_name }}" class="ps-btn" style="margin-top: 16px;">Back to Course</a>
 </div>
 {% else %}
 <div class="carto-gallery" style="margin-top: 24px;" id="carto-gallery">
