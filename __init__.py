@@ -67,7 +67,53 @@ def _migrate_tables(db_path: Path) -> None:
     db.close()
 
 
+def _ensure_cairo() -> bool:
+    """Ensure the libcairo2 system library is available for cairosvg.
+
+    Detects missing libcairo and attempts to install it via the system
+    package manager (best-effort, requires passwordless sudo). Returns True
+    if cairo is available, False if PDF export cannot work.
+    """
+    try:
+        __import__("cairosvg")
+    except ImportError:
+        return False
+
+    try:
+        from cairosvg import svg2pdf
+        svg2pdf(bytestring=b"<svg xmlns='http://www.w3.org/2000/svg'><rect width='10' height='10'/></svg>")
+        return True
+    except OSError:
+        pass
+
+    for cmd in (
+        ["sudo", "apt-get", "install", "-y", "libcairo2"],
+        ["sudo", "dnf", "install", "-y", "cairo"],
+        ["sudo", "yum", "install", "-y", "cairo"],
+        ["sudo", "pacman", "-S", "--noconfirm", "cairo"],
+        ["brew", "install", "cairo"],
+    ):
+        try:
+            result = subprocess.run(cmd, capture_output=True, timeout=120)
+            if result.returncode == 0:
+                log.info("cartographer: installed libcairo via %s", cmd[0])
+                return True
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+        except Exception:
+            continue
+
+    return False
+
+
 def register(app):
+    # 0. Ensure system deps for cairosvg (best-effort)
+    try:
+        if not _ensure_cairo():
+            log.warning("cartographer: libcairo not found and auto-install failed. PDF export will error. Install manually: sudo apt install libcairo2")
+    except Exception:
+        log.warning("cartographer: system dep check failed", exc_info=True)
+
     # 1. Set server-aware data directory
     carto_data = importlib.import_module(__name__ + ".data")
     carto_data._server_data_dir = Path(app.config["DATA_DIR"]) / "plugins" / "pinsheet-cartographer"
