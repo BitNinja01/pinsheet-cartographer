@@ -358,3 +358,55 @@ class TestOsmUpload:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 400
+
+
+class TestPDFExport:
+    def test_pdf_config_page_renders(self, cartographer_app):
+        holes = {"1": _make_simple_hole(1)}
+        _write_test_geo(cartographer_app.config["DATA_DIR"], "Test GC", holes)
+        with cartographer_app.test_client() as client:
+            resp = client.get("/plugins/cartographer/Test%20GC/pdf")
+            assert resp.status_code == 200
+            assert b"Generate PDF" in resp.data
+
+    def test_pdf_config_no_geometry(self, cartographer_app):
+        with cartographer_app.test_client() as client:
+            resp = client.get("/plugins/cartographer/NoSuchCourse/pdf")
+            assert resp.status_code == 200
+            assert b"no geometry" in resp.data.lower() or b"No geometry" in resp.data
+
+    def test_pdf_generate_no_geo_returns_400(self, cartographer_app):
+        with cartographer_app.test_client() as client:
+            resp = client.post("/plugins/cartographer/NoSuchCourse/pdf/generate", json={})
+            assert resp.status_code == 400
+            assert "geometry" in resp.get_json().get("error", "")
+
+    def test_pdf_download_not_found_returns_404(self, cartographer_app):
+        with cartographer_app.test_client() as client:
+            resp = client.get("/plugins/cartographer/Test%20GC/pdf/download")
+            assert resp.status_code == 404
+
+    def test_course_picker_shows_generate_button_without_pdf(self, cartographer_app):
+        holes = {"1": _make_simple_hole(1)}
+        _write_test_geo(cartographer_app.config["DATA_DIR"], "Test GC", holes)
+        with cartographer_app.test_client() as client:
+            resp = client.get("/plugins/cartographer/")
+            assert resp.status_code == 200
+            assert b"Generate PDF" in resp.data
+
+    def test_course_picker_shows_download_with_pdf(self, cartographer_app):
+        holes = {"1": _make_simple_hole(1)}
+        data_dir = cartographer_app.config["DATA_DIR"]
+        _write_test_geo(data_dir, "Test GC", holes)
+        import sqlite3
+        db = sqlite3.connect(str(cartographer_app.config["DB_PATH"]))
+        db.execute(
+            "INSERT INTO plugin_cartographer_geometry (user_id, course_name, pdf_generated_at) VALUES (?, ?, ?)",
+            (1, "Test GC", "2026-05-15T12:00:00+00:00"),
+        )
+        db.commit()
+        db.close()
+        with cartographer_app.test_client() as client:
+            resp = client.get("/plugins/cartographer/")
+            assert resp.status_code == 200
+            assert b"Download" in resp.data
