@@ -96,6 +96,16 @@ def course_picker():
         holes = geo_data.get("holes", {})
         scale = geo_data.get("scale", {})
         has_osm = get_osm_path(name).exists()
+
+        pdf_ts = pdf_timestamps.get(name)
+        if pdf_ts is None:
+            from .data import _get_plugin_data_dir as _pd
+            safe = name.lower().replace(" ", "_").replace("'", "").replace('"', "")
+            zip_path = _pd() / "yardage_books" / safe / f"{safe}.zip"
+            if zip_path.exists():
+                mtime = datetime.fromtimestamp(zip_path.stat().st_mtime, tz=timezone.utc)
+                pdf_ts = mtime.isoformat()
+
         courses.append({
             "name": name,
             "hole_count": len(holes),
@@ -103,8 +113,8 @@ def course_picker():
             "feature_count": scale.get("feature_count", 0),
             "has_osm": has_osm,
             "has_geometry": bool(holes),
-            "pdf_generated_at": pdf_timestamps.get(name),
-            "pdf_status": "stale" if (ts := pdf_timestamps.get(name)) and (datetime.now(timezone.utc) - datetime.fromisoformat(ts)).days >= 182 else "fresh" if ts else None,
+            "pdf_generated_at": pdf_ts,
+            "pdf_status": "stale" if (ts := pdf_ts) and (datetime.now(timezone.utc) - datetime.fromisoformat(ts)).days >= 182 else "fresh" if ts else None,
         })
 
     return render_template(
