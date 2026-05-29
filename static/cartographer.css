@@ -383,3 +383,24 @@
   color: white;
   border-color: var(--ps-warn);
 }
+
+/* ====== PDF Export ====== */
+
+.pdf-progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--ps-rule-c);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.pdf-progress-fill {
+    height: 100%;
+    background: var(--ps-accent);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.pdf-progress-fill.error {
+    background: var(--ps-warn);
+}
