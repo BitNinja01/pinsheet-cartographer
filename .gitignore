@@ -167,3 +167,4 @@ cython_debug/
 # Tagger static assets (downloaded separately)
 tagger/static/leaflet/*
 !tagger/static/leaflet/.gitkeep
+AGENTS.md
