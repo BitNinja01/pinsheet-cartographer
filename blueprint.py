@@ -37,18 +37,31 @@ def _get_settings():
 
 @bp.route("/")
 def course_picker():
+    import sqlite3
+    _db = sqlite3.connect(str(current_app.config["DB_PATH"]))
+    _server_courses = {
+        row["name"]: True
+        for row in _db.execute("SELECT name FROM courses").fetchall()
+    }
+    _db.close()
+
     courses_geo = load_courses_geo()
     courses = []
-    for name, data in sorted(courses_geo.items()):
-        holes = data.get("holes", {})
-        scale = data.get("scale", {})
+
+    for name in sorted(set(list(_server_courses.keys()) + list(courses_geo.keys()))):
+        geo_data = courses_geo.get(name, {})
+        holes = geo_data.get("holes", {})
+        scale = geo_data.get("scale", {})
+        has_osm = get_osm_path(name).exists()
         courses.append({
             "name": name,
             "hole_count": len(holes),
             "tagged_at": scale.get("tagged_at", ""),
             "feature_count": scale.get("feature_count", 0),
-            "has_osm": get_osm_path(name).exists(),
+            "has_osm": has_osm,
+            "has_geometry": bool(holes),
         })
+
     return render_template(
         "course_picker.html",
         courses=courses,
