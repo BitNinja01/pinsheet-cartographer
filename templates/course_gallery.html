@@ -11,15 +11,15 @@
     <a href="/plugins/cartographer" class="ps-btn" style="margin-top: 16px;">Back to Courses</a>
 </div>
 {% else %}
-<div class="carto-gallery" style="margin-top: 24px;">
+<div class="carto-gallery" style="margin-top: 24px;" id="carto-gallery">
     {% for hole in holes %}
     <a href="/plugins/cartographer/{{ course_name }}/hole/{{ hole.number }}"
        class="carto-hole-card {% if not hole.has_data %}carto-hole-card--empty{% endif %}"
        {% if not hole.has_data %}aria-disabled="true"{% endif %}>
         <div class="carto-hole-number ps-eyebrow">{{ hole.number }}</div>
-        <div class="carto-hole-thumb">
-            {% if hole.svg %}
-            {{ hole.svg|safe }}
+        <div class="carto-hole-thumb" data-hole="{{ hole.number }}">
+            {% if hole.has_data %}
+            <div class="carto-hole-placeholder">Loading...</div>
             {% else %}
             <div class="carto-hole-placeholder">No Data</div>
             {% endif %}
@@ -27,5 +27,29 @@
     </a>
     {% endfor %}
 </div>
+
+<script>
+(function() {
+    var thumbs = document.querySelectorAll('.carto-hole-thumb[data-hole]');
+    var loaded = 0;
+    function loadNext() {
+        if (loaded >= thumbs.length) return;
+        var thumb = thumbs[loaded++];
+        var hole = thumb.getAttribute('data-hole');
+        var url = '/plugins/cartographer/{{ course_name }}/api/hole/' + hole + '/svg';
+        fetch(url).then(function(r) {
+            if (!r.ok) { thumb.innerHTML = '<div class="carto-hole-placeholder">Error</div>'; return; }
+            return r.text();
+        }).then(function(svg) {
+            if (svg) { thumb.innerHTML = svg; }
+        }).catch(function() {
+            thumb.innerHTML = '<div class="carto-hole-placeholder">Error</div>';
+        }).then(function() {
+            setTimeout(loadNext, 50);
+        });
+    }
+    if (thumbs.length) loadNext();
+})();
+</script>
 {% endif %}
 {% endblock %}

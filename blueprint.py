@@ -129,6 +129,26 @@ def hole_viewer(course, hole_number):
     )
 
 
+@bp.route("/<string:course>/api/hole/<int:hole_number>/svg")
+def hole_svg(course, hole_number):
+    courses_geo = load_courses_geo()
+    course_data = courses_geo.get(course)
+    if not course_data:
+        return "", 404
+
+    holes = course_data.get("holes", {})
+    if str(hole_number) not in holes:
+        return "", 404
+
+    try:
+        from .renderer import render_hole_svg
+        svg = render_hole_svg(course, hole_number, settings=_get_settings())
+        return svg, 200, {"Content-Type": "image/svg+xml"}
+    except Exception:
+        log.exception("cartographer: failed to render SVG for hole %d / %s", hole_number, course)
+        return "", 500
+
+
 @bp.route("/<string:course>/gallery")
 def course_gallery(course):
     courses_geo = load_courses_geo()
@@ -144,20 +164,8 @@ def course_gallery(course):
         ), 404
 
     holes_data = course_data.get("holes", {})
-    settings = _get_settings()
     max_hole = max(int(k) for k in holes_data.keys()) if holes_data else 0
-    holes = []
-    for h in range(1, max_hole + 1):
-        hole_key = str(h)
-        svg = ""
-        if hole_key in holes_data:
-            try:
-                from .renderer import render_hole_svg
-                svg = render_hole_svg(course, h, settings=settings)
-            except Exception:
-                log.exception("cartographer: failed to render hole %d for %s", h, course)
-                svg = ""
-        holes.append({"number": h, "svg": svg, "has_data": hole_key in holes_data})
+    holes = [{"number": h, "has_data": str(h) in holes_data} for h in range(1, max_hole + 1)]
 
     return render_template(
         "course_gallery.html",
