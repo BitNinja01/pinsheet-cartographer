@@ -384,7 +384,7 @@ def generate_book(
     rounds_by_hole = {}
     stats_data = None
     if "stats_panel" in [slot1_mode, slot2_mode] and show_calculated_stats:
-        from cartographer import stats as stats_module
+        from . import stats as stats_module
         
         # Load all rounds for this course
         if rounds_data is not None:
