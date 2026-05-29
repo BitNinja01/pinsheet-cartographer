@@ -3,7 +3,9 @@
 <style>
 .ps-layout { display: flex; height: 100vh; }
 .ps-sidebar { display: none; }
-.ps-main { padding: 0; width: 100%; max-width: none; }
+.ps-main { padding: 0; width: 100%; max-width: none; flex-direction: row; }
+#map { flex: 1; height: 100vh; }
+#sidebar { width: 360px; overflow-y: auto; }
 body { margin: 0; overflow: hidden; }
 .tagger-error { padding: 12px; margin: 8px; border-radius: 4px; background: oklch(18% 0.06 25); border: 1px solid oklch(64% 0.20 25); color: oklch(64% 0.20 25); font-size: 14px; }
 </style>
