@@ -16,6 +16,27 @@ from flask import Blueprint
 
 log = logging.getLogger("pinsheet")
 
+# JS snippet injected for Upload OSM on the core Courses page
+_COURSE_UPLOAD_JS = (
+    '<script>'
+    'document.addEventListener("click",function(e){'
+    'var t=e.target.closest("[data-action=upload-osm]");'
+    'if(!t)return;'
+    'var inp=document.createElement("input");'
+    'inp.type="file";inp.accept=".osm";inp.style.display="none";'
+    'inp.addEventListener("change",function(){'
+    'var f=this.files[0];if(!f)return;'
+    'var fd=new FormData();fd.append("osm_file",f);'
+    'var btn=t;btn.textContent="Uploading...";'
+    'fetch("/plugins/cartographer/"+encodeURIComponent(t.getAttribute("data-course"))+"/upload-osm",{method:"POST",body:fd})'
+    '.then(function(r){if(r.ok){location.reload()}else{return r.json().then(function(d){btn.textContent=d.message||"Upload failed";setTimeout(function(){btn.textContent="Upload OSM"},3000)})}})'
+    '.catch(function(){btn.textContent="Network error";setTimeout(function(){btn.textContent="Upload OSM"},3000)});'
+    '});'
+    'inp.click();'
+    '});'
+    '</script>'
+)
+
 plugin_info = {
     "name": "cartographer",
     "version": "1.4.0",
@@ -168,20 +189,61 @@ def register(app):
         (app._plugin_blocks.get("head", "") + "\n" + head_tag).strip()
     )
 
-    # 7. Register course actions (buttons on the /courses page and course detail page)
-    from urllib.parse import quote as _quote
-    app._plugin_course_actions.append({
-        "label": "Holes",
-        "url_maker": lambda name: f"/plugins/cartographer/{_quote(name)}/gallery",
-    })
-    app._plugin_course_actions.append({
-        "label": "Tag",
-        "url_maker": lambda name: f"/plugins/cartographer/{_quote(name)}/tag",
-    })
-    app._plugin_course_actions.append({
-        "label": "PDF",
-        "url_maker": lambda name: f"/plugins/cartographer/{_quote(name)}/pdf",
-    })
+    # 7. Register dynamic course actions (per-course state on the /courses page)
+    def _course_actions(course_name: str) -> list[dict]:
+        from .data import get_osm_path, load_courses_geo
+        import sqlite3
+        from datetime import datetime, timezone
+
+        osm_path = get_osm_path(course_name)
+        has_osm = osm_path.exists()
+
+        courses_geo = load_courses_geo()
+        geo = courses_geo.get(course_name, {})
+        has_geometry = bool(geo.get("holes", {}))
+
+        pdf_status = None
+        try:
+            db = sqlite3.connect(str(app.config["DB_PATH"]))
+            row = db.execute(
+                "SELECT pdf_generated_at FROM plugin_cartographer_geometry WHERE course_name = ?",
+                (course_name,),
+            ).fetchone()
+            db.close()
+            if row and row[0]:
+                ts = row[0]
+                days = (datetime.now(timezone.utc) - datetime.fromisoformat(ts)).days
+                pdf_status = "stale" if days >= 182 else "fresh"
+        except Exception:
+            pass
+
+        from urllib.parse import quote
+        encoded = quote(course_name)
+        actions = []
+
+        if has_osm:
+            actions.append({"label": "View", "url": f"/plugins/cartographer/{encoded}/gallery"})
+            actions.append({"label": "Tag", "url": f"/plugins/cartographer/{encoded}/tag"})
+        elif has_geometry:
+            actions.append({"label": "View", "url": f"/plugins/cartographer/{encoded}/gallery"})
+            actions.append({"label": "Upload OSM", "url": "#", "attrs": {"data-action": "upload-osm", "data-course": course_name}})
+        else:
+            actions.append({"label": "Upload OSM", "url": "#", "attrs": {"data-action": "upload-osm", "data-course": course_name}})
+
+        if pdf_status == "fresh":
+            actions.append({"label": "Download PDF", "url": f"/plugins/cartographer/{encoded}/pdf/download"})
+        elif pdf_status == "stale":
+            actions.append({"label": "Regen PDF", "url": f"/plugins/cartographer/{encoded}/pdf"})
+        elif has_geometry:
+            actions.append({"label": "Generate PDF", "url": f"/plugins/cartographer/{encoded}/pdf"})
+
+        return actions
+
+    app._plugin_course_actions.append({"actions_fn": _course_actions})
+
+    app._plugin_blocks["foot"] = (
+        (app._plugin_blocks.get("foot", "") + "\n" + _COURSE_UPLOAD_JS).strip()
+    )
 
     # 8. Add nav link
     app._plugin_nav.append({
@@ -206,6 +268,9 @@ def unregister(app):
     head_tag = '<link rel="stylesheet" href="/plugins/cartographer/static/cartographer.css">'
     current_head = app._plugin_blocks.get("head", "")
     app._plugin_blocks["head"] = current_head.replace(head_tag, "").strip()
+
+    current_foot = app._plugin_blocks.get("foot", "")
+    app._plugin_blocks["foot"] = current_foot.replace(_COURSE_UPLOAD_JS, "").strip()
 
     app._plugin_nav[:] = [
         entry for entry in app._plugin_nav
