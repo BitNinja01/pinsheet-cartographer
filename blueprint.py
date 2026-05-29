@@ -282,6 +282,23 @@ def tagger_api_assignments(course):
     return handle_get_assignments(course)
 
 
+@bp.route("/<string:course>/actions-html")
+def course_actions_html(course):
+    try:
+        from . import _course_actions as _ca
+        acts = _ca(course)
+    except Exception:
+        acts = []
+    parts = []
+    for a in acts:
+        url = a.get("url", "#")
+        label = a.get("label", "")
+        attrs = "".join(f' {k}="{v}"' for k, v in a.get("attrs", {}).items())
+        parts.append(f'<a href="{url}" class="btn" style="margin-left:0.5rem"{attrs}>{label}</a>')
+    html = "".join(parts)
+    return html, 200, {"Content-Type": "text/html"}
+
+
 @bp.route("/<string:course>/upload-osm", methods=["POST"])
 def upload_osm(course):
     import xml.etree.ElementTree as ET
