@@ -329,6 +329,9 @@ def generate_book(
     settings: dict | None = None,
     progress_callback: callable = None,
     status_callback: callable = None,
+    data_dir: Path | None = None,
+    courses_data: dict | None = None,
+    rounds_data: list[dict] | None = None,
 ) -> None:
     """Generate a complete yardage book for a course.
 
@@ -340,6 +343,9 @@ def generate_book(
     settings: plugin settings dict.
     progress_callback: optional function(current_page, total_pages) for progress updates
     status_callback: optional function(message) for status text updates
+    data_dir: override data directory for courses.json; if None, auto-resolve.
+    courses_data: pre-loaded courses dict; if given, skip reading courses.json.
+    rounds_data: pre-loaded rounds list; if given, skip reading rounds files.
     """
     if settings is None:
         settings = {}
@@ -351,13 +357,18 @@ def generate_book(
         raise ValueError(f"No geometry found for course '{course_name}'. Run: python -m cartographer.tagger \"{course_name}\"")
 
     # Load course data from PinSheet's courses.json for tee yardages
-    if getattr(sys, "frozen", False):
+    if data_dir is not None:
+        courses_json = data_dir / "courses.json"
+    elif getattr(sys, "frozen", False):
         courses_json = Path(sys.executable).parent / "data" / "courses.json"
     else:
         courses_json = Path(__file__).parent.parent.parent / "data" / "courses.json"
 
     import json
-    pinsheet_courses = json.loads(courses_json.read_text()) if courses_json.exists() else {}
+    if courses_data is not None:
+        pinsheet_courses = courses_data
+    else:
+        pinsheet_courses = json.loads(courses_json.read_text()) if courses_json.exists() else {}
     course_ps = pinsheet_courses.get(course_name, {})
 
     # Compute course-level metadata for front/back pages
@@ -375,15 +386,18 @@ def generate_book(
         from cartographer import stats as stats_module
         
         # Load all rounds for this course
-        all_rounds = []
-        rounds_dir = courses_json.parent / "rounds"
-        if rounds_dir.exists():
-            for year_file in rounds_dir.glob("*.json"):
-                year_rounds = json.loads(year_file.read_text())
-                for date_str, date_rounds in year_rounds.items():
-                    for idx_str, rnd in date_rounds.items():
-                        if rnd.get("course") == course_name:
-                            all_rounds.append(rnd)
+        if rounds_data is not None:
+            all_rounds = rounds_data
+        else:
+            all_rounds = []
+            rounds_dir = courses_json.parent / "rounds"
+            if rounds_dir.exists():
+                for year_file in rounds_dir.glob("*.json"):
+                    year_rounds = json.loads(year_file.read_text())
+                    for date_str, date_rounds in year_rounds.items():
+                        for idx_str, rnd in date_rounds.items():
+                            if rnd.get("course") == course_name:
+                                all_rounds.append(rnd)
         
         # Group by hole number
         for hole_num in range(1, 19):
