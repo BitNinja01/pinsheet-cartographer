@@ -18,7 +18,7 @@ jobs:
       - name: Checkout pinsheet (parent)
         uses: actions/checkout@v4
         with:
-          repository: BitNinja01/pinsheet
+          repository: BitNinja01/pinsheet-server
           path: pinsheet
 
       - name: Checkout cartographer (plugin)
