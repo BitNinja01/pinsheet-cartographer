@@ -19,8 +19,7 @@ import json
 import sqlite3
 import threading
 import time
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
+from datetime import datetime, timezone
 
 from flask import Response, abort, send_file
 
