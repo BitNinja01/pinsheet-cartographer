@@ -19,6 +19,7 @@ from flask import (
     render_template,
     request,
     send_file,
+    stream_with_context,
 )
 from flask_login import current_user
 
@@ -478,7 +479,14 @@ def pdf_stream(course, job_id):
                 return
             time.sleep(0.5)
 
-    return Response(_generate(), mimetype="text/event-stream")
+    response = Response(
+        stream_with_context(_generate()),
+        mimetype="text/event-stream",
+    )
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+    response.headers["Connection"] = "keep-alive"
+    return response
 
 
 @bp.route("/<string:course>/pdf/download")
