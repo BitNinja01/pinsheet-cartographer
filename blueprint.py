@@ -460,6 +460,20 @@ def _do_pdf_generate(course):
     return jsonify({"status": "ok", "job_id": job_id})
 
 
+@bp.route("/<string:course>/pdf/status/<job_id>")
+def pdf_status(course, job_id):
+    job = _pdf_jobs.get(job_id)
+    if job is None:
+        return jsonify({"status": "unknown", "error": "Job not found"}), 404
+    return jsonify({
+        "status": job["status"],
+        "current": job["current"],
+        "total": job["total"],
+        "detail": job["detail"],
+        "error": job.get("error"),
+    })
+
+
 @bp.route("/<string:course>/pdf/stream/<job_id>")
 def pdf_stream(course, job_id):
     def _generate():

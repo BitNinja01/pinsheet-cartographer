@@ -152,7 +152,13 @@
             });
             evtSource.addEventListener('error', function(e) {
                 evtSource.close();
-                try { showError(JSON.parse(e.data)); } catch(_) { showError('Generation failed. Check server logs.'); }
+                if (e.data && e.data !== '') {
+                    try { showError(JSON.parse(e.data)); return; } catch(_) {}
+                }
+                fetch(window.location.href + '/status/' + data.job_id).then(function(r) { return r.json(); }).then(function(j) {
+                    if (j.status === 'error') { showError(j.error || 'Generation failed'); }
+                    else { showError('Connection lost. The server may still be working — check server logs.'); }
+                }).catch(function() { showError('Connection lost.'); });
             });
         }).catch(function(err) {
             showError('Network error: ' + err.message);
