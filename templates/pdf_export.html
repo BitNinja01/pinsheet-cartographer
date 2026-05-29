@@ -12,52 +12,35 @@
     <a href="/plugins/cartographer/{{ course_encoded }}/tag" class="ps-btn ps-btn--accent">Open Tagger</a>
     {% else %}
     <form id="pdf-form">
-        <div style="margin-bottom: 20px;">
-            <label class="ps-label" style="display:block;margin-bottom:8px;">Top slot</label>
-            <select name="slot1" class="ps-input" style="width:100%;">
+        <div class="wizard-step">
+            <label class="step-label">Top slot</label>
+            <select name="slot1" class="step-input">
                 <option value="green_grid" selected>Green Grid</option>
                 <option value="stats_panel">Stats Panel</option>
                 <option value="notes">Notes</option>
             </select>
         </div>
-        <div style="margin-bottom: 20px;">
-            <label class="ps-label" style="display:block;margin-bottom:8px;">Bottom slot</label>
-            <select name="slot2" class="ps-input" style="width:100%;">
+        <div class="wizard-step">
+            <label class="step-label">Bottom slot</label>
+            <select name="slot2" class="step-input">
                 <option value="green_grid">Green Grid</option>
                 <option value="stats_panel" selected>Stats Panel</option>
                 <option value="notes">Notes</option>
             </select>
         </div>
-        <div style="margin-bottom: 16px;">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                <input type="checkbox" name="show_stats" checked>
-                <span>Show calculated stats</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                <input type="checkbox" name="yardage_arcs" checked>
-                <span>Yardage arcs</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                <input type="checkbox" name="green_heightmap" checked>
-                <span>Green heightmap</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                <input type="checkbox" name="green_contours" checked>
-                <span>Green contours</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                <input type="checkbox" name="green_arrows" checked>
-                <span>Green arrows</span>
-            </label>
+        <div class="wizard-step">
+            <label class="step-label">Options</label>
+            <label class="settings-toggle"><input type="checkbox" name="show_stats" checked>Show calculated stats</label>
+            <label class="settings-toggle"><input type="checkbox" name="yardage_arcs" checked>Yardage arcs</label>
+            <label class="settings-toggle"><input type="checkbox" name="green_heightmap" checked>Green heightmap</label>
+            <label class="settings-toggle"><input type="checkbox" name="green_contours" checked>Green contours</label>
+            <label class="settings-toggle"><input type="checkbox" name="green_arrows" checked>Green arrows</label>
         </div>
         {% if tees %}
-        <div style="margin-bottom: 20px;">
-            <label class="ps-label" style="display:block;margin-bottom:8px;">Tees</label>
+        <div class="wizard-step">
+            <label class="step-label">Tees</label>
             {% for tee in tees %}
-            <label style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;cursor:pointer;">
-                <input type="checkbox" name="tees" value="{{ tee }}" checked>
-                <span>{{ tee }}</span>
-            </label>
+            <label class="settings-toggle" style="display:inline-flex;margin-right:16px;"><input type="checkbox" name="tees" value="{{ tee }}" checked>{{ tee }}</label>
             {% endfor %}
         </div>
         {% endif %}
