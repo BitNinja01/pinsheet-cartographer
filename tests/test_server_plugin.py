@@ -13,13 +13,11 @@ if str(_parent) not in sys.path:
 
 from source.database import set_db_path, init_db
 
-_bp_registered = False
-
 
 @pytest.fixture
 def cartographer_app(tmp_path, monkeypatch):
-    """Create a Flask app with cartographer plugin registered."""
-    global _bp_registered
+    """Create a Flask app with cartographer plugin discovered and registered."""
+    from source import plugin, plugin_loader
 
     import source.main as main_mod
     main_mod.limiter.enabled = False
@@ -27,8 +25,7 @@ def cartographer_app(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     (data_dir / "drafts").mkdir()
-    carto_data_dir = data_dir / "plugins" / "cartographer"
-    carto_data_dir.mkdir(parents=True)
+    (data_dir / "plugins" / "cartographer").mkdir(parents=True)
 
     db_path = str(data_dir / "pinsheet.db")
     set_db_path(db_path)
@@ -47,64 +44,30 @@ def cartographer_app(tmp_path, monkeypatch):
     app.config["DATA_DIR"] = data_dir
     app._plugin_blocks = {}
     app._plugin_nav = []
-    app.jinja_env.globals.setdefault("settings", {"theme": "dark"})
 
-    plugin_path = Path(__file__).parent.parent
-    templates_dir = str(plugin_path / "templates")
-    search_path = getattr(app.jinja_loader, "searchpath", None)
-    if search_path is not None and templates_dir not in search_path:
-        search_path.append(templates_dir)
+    plugins_dir = Path(__file__).parent.parent.parent  # plugins/
+    monkeypatch.setattr(plugin_loader, "_plugins_dir", lambda: plugins_dir)
 
-    import cartographer.data as carto_data
-    original_data_dir = carto_data._server_data_dir
-    carto_data._server_data_dir = carto_data_dir
-
-    try:
-        from cartographer.__init__ import _install_fonts
-        _install_fonts()
-    except Exception:
-        pass
-
-    import sqlite3
-    db = sqlite3.connect(str(app.config["DB_PATH"]))
-    db.execute(
-        "CREATE TABLE IF NOT EXISTS plugin_cartographer_geometry ("
-        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-        " user_id INTEGER NOT NULL,"
-        " course_name TEXT NOT NULL,"
-        " tagged_at TEXT,"
-        " pixels_per_yard REAL,"
-        " feature_count INTEGER DEFAULT 0,"
-        " FOREIGN KEY (user_id) REFERENCES users(id),"
-        " UNIQUE(user_id, course_name)"
-        ")"
-    )
-    db.commit()
-    db.close()
-
-    from cartographer.blueprint import bp
-    if not _bp_registered:
-        app.register_blueprint(bp)
-        _bp_registered = True
-
-    head_tag = '<link rel="stylesheet" href="/plugins/cartographer/static/cartographer.css">'
-    app._plugin_blocks["head"] = (
-        (app._plugin_blocks.get("head", "") + "\n" + head_tag).strip()
-    )
-    app._plugin_nav.append({
-        "label": "Course Maps",
-        "url": "/plugins/cartographer",
-        "page_id": "cartographer",
-    })
-    app.config.setdefault("plugins.cartographer.yardage_arcs", True)
-    app.config.setdefault("plugins.cartographer.yardage_arc_distances", [100, 125, 150, 175, 200])
+    plugin._plugins.clear()
+    plugin_loader.discover_plugins(app)
 
     yield app
 
-    app._plugin_blocks["head"] = app._plugin_blocks.get("head", "").replace(head_tag, "").strip().strip("\n")
-    app._plugin_nav[:] = [e for e in app._plugin_nav if e.get("page_id") != "cartographer"]
-    carto_data._server_data_dir = original_data_dir
+    for p in list(plugin._plugins):
+        if hasattr(p, "unregister"):
+            p.unregister(app)
+    plugin._plugins.clear()
+    app._plugin_blocks.clear()
+    app._plugin_nav.clear()
     app._got_first_request = original_got_first
+
+    # Unregister plugin blueprints from the Flask app
+    for bp_name in list(app.blueprints.keys()):
+        if bp_name.startswith("cartographer"):
+            del app.blueprints[bp_name]
+    static_endpoint = "_plugin_cartographer_static"
+    if static_endpoint in app.view_functions:
+        del app.view_functions[static_endpoint]
 
 
 def _write_test_geo(data_dir: Path, course_name: str, hole_data: dict) -> None:
