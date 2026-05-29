@@ -8,6 +8,7 @@ from flask import (
     Blueprint,
     current_app,
     g,
+    jsonify,
     render_template,
     request,
 )
@@ -203,3 +204,31 @@ def tagger_api_delete_split(course, split_id):
 def tagger_api_assignments(course):
     from .tagger.server import handle_get_assignments
     return handle_get_assignments(course)
+
+
+@bp.route("/<string:course>/upload-osm", methods=["POST"])
+def upload_osm(course):
+    import xml.etree.ElementTree as ET
+
+    if "osm_file" not in request.files:
+        return jsonify({"status": "error", "message": "No file provided"}), 400
+
+    f = request.files["osm_file"]
+    if not f.filename or not f.filename.endswith(".osm"):
+        return jsonify({"status": "error", "message": "File must have .osm extension"}), 400
+
+    data = f.read()
+    if not data:
+        return jsonify({"status": "error", "message": "File is empty"}), 400
+
+    try:
+        root = ET.fromstring(data)
+        if root.tag != "osm":
+            raise ValueError("root tag is not osm")
+    except Exception:
+        return jsonify({"status": "error", "message": "File does not appear to be a valid OSM XML file"}), 400
+
+    path = get_osm_path(course)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return jsonify({"status": "ok"})

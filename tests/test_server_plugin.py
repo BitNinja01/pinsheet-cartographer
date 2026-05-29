@@ -1,4 +1,5 @@
 """Integration tests for the cartographer server plugin."""
+import io
 import json
 import sys
 from pathlib import Path
@@ -306,3 +307,54 @@ class TestTaggerRoutes:
             assert list_resp.status_code == 200
             list_data = list_resp.get_json()
             assert len(list_data["features"]) == 1
+
+
+class TestOsmUpload:
+    def test_upload_valid_osm(self, cartographer_app):
+        client = cartographer_app.test_client()
+        osm_content = b'<?xml version="1.0"?><osm version="0.6"><node id="1" lat="47.6" lon="-122.3"/></osm>'
+        resp = client.post(
+            "/plugins/cartographer/Test%20GC/upload-osm",
+            data={"osm_file": (io.BytesIO(osm_content), "course.osm")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+        assert resp.get_json() == {"status": "ok"}
+
+    def test_upload_invalid_extension(self, cartographer_app):
+        client = cartographer_app.test_client()
+        resp = client.post(
+            "/plugins/cartographer/Test%20GC/upload-osm",
+            data={"osm_file": (io.BytesIO(b"data"), "course.txt")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
+        assert "extension" in resp.get_json()["message"]
+
+    def test_upload_invalid_xml(self, cartographer_app):
+        client = cartographer_app.test_client()
+        resp = client.post(
+            "/plugins/cartographer/Test%20GC/upload-osm",
+            data={"osm_file": (io.BytesIO(b"not xml at all"), "course.osm")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
+        assert "valid" in resp.get_json()["message"]
+
+    def test_upload_no_file(self, cartographer_app):
+        client = cartographer_app.test_client()
+        resp = client.post(
+            "/plugins/cartographer/Test%20GC/upload-osm",
+            data={},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
+
+    def test_upload_empty_file(self, cartographer_app):
+        client = cartographer_app.test_client()
+        resp = client.post(
+            "/plugins/cartographer/Test%20GC/upload-osm",
+            data={"osm_file": (io.BytesIO(b""), "course.osm")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
