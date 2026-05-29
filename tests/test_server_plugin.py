@@ -1,8 +1,15 @@
 """Integration tests for the cartographer server plugin."""
 import json
+import sys
 from pathlib import Path
 
 import pytest
+
+# Ensure pinsheet-server source is importable (needed in CI where plugin is
+# a checked-out nested repo and PYTHONPATH may not include the parent).
+_parent = Path(__file__).resolve().parent.parent.parent.parent
+if str(_parent) not in sys.path:
+    sys.path.insert(0, str(_parent))
 
 from source.database import set_db_path, init_db
 
