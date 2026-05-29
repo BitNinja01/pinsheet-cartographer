@@ -23,13 +23,14 @@
 }
 
 .carto-hole-card {
+    position: relative;
     display: block;
     background: var(--ps-paper-2);
     border: var(--ps-rule) solid var(--ps-rule-c);
     padding: var(--ps-sp-2);
     text-decoration: none;
     color: var(--ps-ink);
-    cursor: pointer;
+    cursor: default;
     transition: border-color var(--ps-dur-quick) var(--ps-ease);
 }
 
@@ -44,8 +45,12 @@
 }
 
 .carto-hole-number {
-    text-align: center;
-    margin-bottom: var(--ps-sp-1);
+    position: absolute;
+    top: var(--ps-sp-1);
+    right: var(--ps-sp-1);
+    font-size: var(--ps-fs-h4);
+    font-weight: 700;
+    line-height: 1;
 }
 
 .carto-hole-thumb {
