@@ -9,9 +9,19 @@ import json
 import sys
 from pathlib import Path
 
+_server_data_dir: Path | None = None
+
 
 def _get_plugin_data_dir() -> Path:
-    """Resolve data/plugins/cartographer/, creating it if needed."""
+    """Resolve data/plugins/cartographer/, creating it if needed.
+
+    When running under PinSheet Server, uses the server-configured
+    DATA_DIR. Otherwise falls back to parent-repo-relative resolution.
+    """
+    if _server_data_dir is not None:
+        _server_data_dir.mkdir(parents=True, exist_ok=True)
+        return _server_data_dir
+
     if getattr(sys, "frozen", False):
         base = Path(sys.executable).parent / "data"
     else:

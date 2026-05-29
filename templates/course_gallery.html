@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ps-topbar">
+    <h1 class="ps-h1">{{ course_name }}</h1>
+    <a href="/plugins/cartographer" class="ps-btn ps-btn--ghost">All Courses</a>
+</div>
+
+{% if error %}
+<div class="ps-card" style="margin-top: 24px; text-align: center;">
+    <p style="color: var(--ps-warn);">{{ error }}</p>
+    <a href="/plugins/cartographer" class="ps-btn" style="margin-top: 16px;">Back to Courses</a>
+</div>
+{% else %}
+<div class="carto-gallery" style="margin-top: 24px;">
+    {% for hole in holes %}
+    <a href="/plugins/cartographer/{{ course_name }}/hole/{{ hole.number }}"
+       class="carto-hole-card {% if not hole.has_data %}carto-hole-card--empty{% endif %}"
+       {% if not hole.has_data %}aria-disabled="true"{% endif %}>
+        <div class="carto-hole-number ps-eyebrow">{{ hole.number }}</div>
+        <div class="carto-hole-thumb">
+            {% if hole.svg %}
+            {{ hole.svg|safe }}
+            {% else %}
+            <div class="carto-hole-placeholder">No Data</div>
+            {% endif %}
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

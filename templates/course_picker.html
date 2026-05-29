@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ps-topbar">
+    <h1 class="ps-h1">Course Maps</h1>
+</div>
+
+{% if courses %}
+<div class="ps-card" style="margin-top: 24px;">
+    <table class="ps-table" style="width: 100%;">
+        <thead>
+            <tr>
+                <th>Course</th>
+                <th>Holes</th>
+                <th>Last Tagged</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in courses %}
+            <tr>
+                <td>{{ c.name }}</td>
+                <td>{{ c.hole_count }}</td>
+                <td>{{ c.tagged_at if c.tagged_at else '&mdash;'|safe }}</td>
+                <td><a href="/plugins/cartographer/{{ c.name }}/gallery" class="ps-btn ps-btn--ghost">View</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="ps-card" style="margin-top: 24px;">
+    <p class="ps-eyebrow" style="margin-bottom: 12px;">No Courses</p>
+    <p style="color: var(--ps-ink-2);">
+        No courses have geometry data yet. Add a course and run the tagger to get started.
+    </p>
+</div>
+{% endif %}
+{% endblock %}

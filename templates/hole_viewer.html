@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ps-topbar">
+    <h1 class="ps-h1">{{ course_name }}</h1>
+    <a href="/plugins/cartographer/{{ course_name }}/gallery" class="ps-btn ps-btn--ghost">Gallery</a>
+</div>
+
+{% if error %}
+<div class="ps-card" style="margin-top: 24px; text-align: center;">
+    <p style="color: var(--ps-warn);">{{ error }}</p>
+    <a href="/plugins/cartographer" class="ps-btn" style="margin-top: 16px;">Back to Courses</a>
+</div>
+{% else %}
+<div class="carto-hole-nav" style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px;">
+    {% if prev_hole %}
+    <a href="/plugins/cartographer/{{ course_name }}/hole/{{ prev_hole }}" class="ps-btn ps-btn--ghost">&larr; Hole {{ prev_hole }}</a>
+    {% else %}
+    <span></span>
+    {% endif %}
+    <span class="ps-eyebrow">Hole {{ hole_number }}</span>
+    {% if next_hole %}
+    <a href="/plugins/cartographer/{{ course_name }}/hole/{{ next_hole }}" class="ps-btn ps-btn--ghost">Hole {{ next_hole }} &rarr;</a>
+    {% else %}
+    <span></span>
+    {% endif %}
+</div>
+
+<div class="ps-card" style="margin-top: 16px; padding: 24px; text-align: center;">
+    {% if svg_content %}
+    <div class="carto-hole-svg">{{ svg_content|safe }}</div>
+    {% else %}
+    <p style="color: var(--ps-ink-2);">Rendering unavailable for this hole.</p>
+    {% endif %}
+</div>
+
+<div class="carto-hole-nav" style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px;">
+    {% if prev_hole %}
+    <a href="/plugins/cartographer/{{ course_name }}/hole/{{ prev_hole }}" class="ps-btn ps-btn--ghost">&larr; Hole {{ prev_hole }}</a>
+    {% else %}
+    <span></span>
+    {% endif %}
+    <a href="/plugins/cartographer/{{ course_name }}/gallery" class="ps-btn ps-btn--ghost">Gallery</a>
+    {% if next_hole %}
+    <a href="/plugins/cartographer/{{ course_name }}/hole/{{ next_hole }}" class="ps-btn ps-btn--ghost">Hole {{ next_hole }} &rarr;</a>
+    {% else %}
+    <span></span>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

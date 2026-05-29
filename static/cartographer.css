@@ -1,0 +1,85 @@
+/* Cartographer plugin styles — uses only PinSheet design tokens */
+
+.carto-hole-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.carto-hole-svg {
+    max-width: 100%;
+}
+
+.carto-hole-svg svg {
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+}
+
+.carto-gallery {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: var(--ps-sp-3);
+}
+
+.carto-hole-card {
+    display: block;
+    background: var(--ps-paper-2);
+    border: var(--ps-rule) solid var(--ps-rule-c);
+    padding: var(--ps-sp-2);
+    text-decoration: none;
+    color: var(--ps-ink);
+    cursor: pointer;
+    transition: border-color var(--ps-dur-quick) var(--ps-ease);
+}
+
+.carto-hole-card:hover {
+    border-color: var(--ps-accent);
+}
+
+.carto-hole-card--empty {
+    opacity: 0.4;
+    cursor: default;
+    pointer-events: none;
+}
+
+.carto-hole-number {
+    text-align: center;
+    margin-bottom: var(--ps-sp-1);
+}
+
+.carto-hole-thumb {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.carto-hole-thumb svg {
+    width: 100%;
+    height: 100%;
+}
+
+.carto-hole-placeholder {
+    font-family: var(--ps-font-mono);
+    font-size: var(--ps-fs-micro);
+    color: var(--ps-ink-3);
+    text-transform: uppercase;
+    letter-spacing: var(--ps-tracking-eyebrow);
+}
+
+/* Mobile: 2 columns at ≤768px */
+@media (max-width: 768px) {
+    .carto-gallery {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* Mobile: 1 column at ≤480px */
+@media (max-width: 480px) {
+    .carto-gallery {
+        grid-template-columns: 1fr;
+    }
+}
