@@ -8,8 +8,8 @@
 .carto-pdf-col { width: 160px; }
 .carto-pdf-col .ps-btn { display: block; width: 100%; text-align: center; box-sizing: border-box; }
 .carto-actions-col { width: 220px; }
-.carto-actions-col .ps-btn { box-sizing: border-box; flex: 1; text-align: center; }
-.carto-actions-col { display: flex; gap: 6px; }
+.carto-actions-row { display: flex; gap: 6px; }
+.carto-actions-row .ps-btn { box-sizing: border-box; flex: 1; text-align: center; }
 .carto-delete-col { width: 60px; text-align: center; }
 .carto-delete-col .ps-btn { color: var(--ps-warn); }
 </style>
@@ -43,6 +43,7 @@
                     {% endif %}
                 </td>
                 <td class="carto-actions-col">
+                    <div class="carto-actions-row">
                     {% if c.has_osm %}
                     <a href="/plugins/cartographer/{{ c.name }}/gallery" class="ps-btn ps-btn--ghost">View</a>
                     <a href="/plugins/cartographer/{{ c.name }}/tag" class="ps-btn ps-btn--ghost">Tag</a>
@@ -50,6 +51,7 @@
                     <button class="ps-btn ps-btn--ghost upload-osm-btn" data-course="{{ c.name }}">Upload OSM</button>
                     <input type="file" accept=".osm" class="upload-osm-input" data-course="{{ c.name }}" style="display:none">
                     {% endif %}
+                    </div>
                 </td>
                 <td class="carto-delete-col">
                     <button class="ps-btn ps-btn--ghost btn-delete-pdf" data-course="{{ c.name }}">Delete</button>
