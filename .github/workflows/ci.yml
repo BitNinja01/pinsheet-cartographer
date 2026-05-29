@@ -20,6 +20,7 @@ jobs:
         with:
           repository: BitNinja01/pinsheet-server
           path: pinsheet
+          ref: dev
 
       - name: Checkout cartographer (plugin)
         uses: actions/checkout@v4
