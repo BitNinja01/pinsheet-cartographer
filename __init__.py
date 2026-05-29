@@ -76,10 +76,16 @@ def register(app):
 
     # 4. Register Blueprint
     try:
-        bp = importlib.import_module(__name__ + ".blueprint").bp
-        app.register_blueprint(bp)
-    except ImportError:
-        log.warning("cartographer: blueprint not found, web routes unavailable")
+        _bp_spec = importlib.util.spec_from_file_location(
+            __name__ + ".blueprint", str(Path(__file__).parent / "blueprint.py"),
+        )
+        _bp_mod = importlib.util.module_from_spec(_bp_spec)
+        import sys as _sys
+        _sys.modules[_bp_mod.__name__] = _bp_mod
+        _bp_spec.loader.exec_module(_bp_mod)
+        app.register_blueprint(_bp_mod.bp)
+    except Exception as _exc:
+        log.warning("cartographer: blueprint registration failed — %s", _exc)
 
     # 5. Inject CSS
     head_tag = '<link rel="stylesheet" href="/plugins/cartographer/static/cartographer.css">'
