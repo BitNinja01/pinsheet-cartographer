@@ -74,6 +74,16 @@ def course_picker():
     except Exception:
         _server_names = set()
 
+    pdf_timestamps = {}
+    try:
+        _db2 = sqlite3.connect(str(current_app.config["DB_PATH"]))
+        _db2.row_factory = sqlite3.Row
+        for row in _db2.execute("SELECT course_name, pdf_generated_at FROM plugin_cartographer_geometry WHERE pdf_generated_at IS NOT NULL"):
+            pdf_timestamps[row["course_name"]] = row["pdf_generated_at"]
+        _db2.close()
+    except Exception:
+        pass
+
     for name in sorted(set(_server_names) | set(courses_geo.keys())):
         geo_data = courses_geo.get(name, {})
         holes = geo_data.get("holes", {})
@@ -86,6 +96,8 @@ def course_picker():
             "feature_count": scale.get("feature_count", 0),
             "has_osm": has_osm,
             "has_geometry": bool(holes),
+            "pdf_generated_at": pdf_timestamps.get(name),
+            "pdf_status": "stale" if (ts := pdf_timestamps.get(name)) and (datetime.now(timezone.utc) - datetime.fromisoformat(ts)).days >= 182 else "fresh" if ts else None,
         })
 
     return render_template(

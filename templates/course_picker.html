@@ -12,6 +12,7 @@
                 <th>Course</th>
                 <th>Holes</th>
                 <th>Last Tagged</th>
+                <th>PDF</th>
                 <th></th>
             </tr>
         </thead>
@@ -21,6 +22,21 @@
                 <td>{{ c.name }}</td>
                 <td>{{ c.hole_count }}</td>
                 <td>{{ c.tagged_at if c.tagged_at else '&mdash;'|safe }}</td>
+                <td>
+                    {% if c.pdf_status == 'fresh' %}
+                    <a href="/plugins/cartographer/{{ c.name }}/pdf/download" class="ps-btn ps-btn--ghost">
+                        Download
+                        <span style="display:block;font-size:10px;color:var(--ps-ink-3);">{{ c.pdf_generated_at[:10] }}</span>
+                    </a>
+                    {% elif c.pdf_status == 'stale' %}
+                    <a href="/plugins/cartographer/{{ c.name }}/pdf" class="ps-btn ps-btn--ghost" style="color:var(--ps-warn);">
+                        Regenerate
+                        <span style="display:block;font-size:10px;color:var(--ps-ink-3);">stale — {{ c.pdf_generated_at[:10] }}</span>
+                    </a>
+                    {% else %}
+                    <a href="/plugins/cartographer/{{ c.name }}/pdf" class="ps-btn ps-btn--ghost">Generate PDF</a>
+                    {% endif %}
+                </td>
                 <td>
                     <a href="/plugins/cartographer/{{ c.name }}/gallery" class="ps-btn ps-btn--ghost">View</a>
                     {% if c.has_osm %}
