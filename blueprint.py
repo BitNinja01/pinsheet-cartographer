@@ -1,27 +1,28 @@
 """Flask Blueprint for Cartographer web pages."""
 from __future__ import annotations
 
+import json
 import logging
+import sqlite3
+import threading
+import time
+from datetime import datetime, timezone
 from urllib.parse import quote
 
 from flask import (
     Blueprint,
+    Response,
+    abort,
     current_app,
     g,
     jsonify,
     render_template,
     request,
+    send_file,
 )
+from flask_login import current_user
 
 from .data import get_osm_path, load_courses_geo
-
-import json
-import sqlite3
-import threading
-import time
-from datetime import datetime, timezone
-
-from flask import Response, abort, send_file
 
 log = logging.getLogger("pinsheet")
 
@@ -323,29 +324,35 @@ def pdf_generate(course):
 
     data_dir = current_app.config["DATA_DIR"]
 
+    user_id = current_user.id if current_user and not current_user.is_anonymous else 1
+
     db = sqlite3.connect(str(current_app.config["DB_PATH"]))
-    db.row_factory = sqlite3.Row
-    course_row = db.execute("SELECT data FROM courses WHERE name = ?", (course,)).fetchone()
-    if course_row:
-        courses_data = {course: json.loads(course_row[0])}
-    else:
-        courses_data = {}
-    round_rows = db.execute(
-        "SELECT * FROM rounds WHERE course_name = ? ORDER BY date", (course,)
-    ).fetchall()
-    rounds_data = []
-    for rr in round_rows:
-        rdict = {
-            "date": rr["date"],
-            "course": rr["course_name"],
-            "holes_selection": rr["holes_played"] or "all",
-            "handicap_index": rr["computed_handicap"] or "15.0",
-            "total_gross": rr["total_gross"] or "0",
-            "total_putts": rr["total_putts"] or "0",
-            "holes": json.loads(rr["holes"]) if rr["holes"] else {},
-        }
-        rounds_data.append(rdict)
-    db.close()
+    try:
+        db.row_factory = sqlite3.Row
+        course_row = db.execute(
+            "SELECT data FROM courses WHERE name = ?", (course,)
+        ).fetchone()
+        if course_row:
+            courses_data = {course: json.loads(course_row[0])}
+        else:
+            courses_data = {}
+        round_rows = db.execute(
+            "SELECT * FROM rounds WHERE course_name = ? ORDER BY date", (course,)
+        ).fetchall()
+        rounds_data = []
+        for rr in round_rows:
+            rdict = {
+                "date": rr["date"],
+                "course": rr["course_name"],
+                "holes_selection": rr["holes_played"] or "all",
+                "handicap_index": rr["computed_handicap"] or "15.0",
+                "total_gross": rr["total_gross"] or "0",
+                "total_putts": rr["total_putts"] or "0",
+                "holes": json.loads(rr["holes"]) if rr["holes"] else {},
+            }
+            rounds_data.append(rdict)
+    finally:
+        db.close()
 
     output_dir = _pd() / "yardage_books" / safe
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -406,7 +413,7 @@ def pdf_generate(course):
                 if _db.total_changes == 0:
                     _db.execute(
                         "INSERT INTO plugin_cartographer_geometry (user_id, course_name, pdf_generated_at) VALUES (?, ?, ?)",
-                        (1, course, now),
+                        (user_id, course, now),
                     )
                 _db.commit()
                 _db.close()
