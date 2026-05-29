@@ -74,11 +74,10 @@ def _parse_osm_xml(path: Path):
         tree = ET.parse(str(path))
         root = tree.getroot()
         def _iter(tag):
-            # Strip {*} prefix for stdlib ET (no namespace wildcard support)
-            stripped = tag[2:] if tag.startswith("{*}") else tag
+            stripped = tag[3:] if tag.startswith("{*}") else tag
             return root.iter(stripped)
         def _findall(parent, tag):
-            stripped = tag[2:] if tag.startswith("{*}") else tag
+            stripped = tag[3:] if tag.startswith("{*}") else tag
             return parent.findall(stripped)
         return root, _iter, _findall
 

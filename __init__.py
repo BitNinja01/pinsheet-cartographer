@@ -74,7 +74,14 @@ def register(app):
     except Exception:
         log.warning("cartographer: DB table creation failed", exc_info=True)
 
-    # 4. Register Blueprint
+    # 4. Log XML parser availability for diagnostic
+    try:
+        import lxml.etree  # noqa: F401
+        log.info("cartographer: using lxml XML parser")
+    except ImportError:
+        log.info("cartographer: lxml not available — using stdlib xml.etree.ElementTree (slower, fewer features)")
+
+    # 5. Register Blueprint
     try:
         _bp_spec = importlib.util.spec_from_file_location(
             __name__ + ".blueprint", str(Path(__file__).parent / "blueprint.py"),
@@ -93,20 +100,20 @@ def register(app):
     except Exception as _exc:
         log.warning("cartographer: blueprint registration failed — %s", _exc)
 
-    # 5. Inject CSS
+    # 6. Inject CSS
     head_tag = '<link rel="stylesheet" href="/plugins/cartographer/static/cartographer.css">'
     app._plugin_blocks["head"] = (
         (app._plugin_blocks.get("head", "") + "\n" + head_tag).strip()
     )
 
-    # 6. Add nav link
+    # 7. Add nav link
     app._plugin_nav.append({
         "label": "Course Maps",
         "url": "/plugins/cartographer",
         "page_id": "cartographer",
     })
 
-    # 7. Default settings
+    # 8. Default settings
     app.config.setdefault("plugins.cartographer.yardage_arcs", True)
     app.config.setdefault("plugins.cartographer.yardage_arc_distances", [100, 125, 150, 175, 200])
 
