@@ -738,7 +738,7 @@ var API_BASE = "/plugins/cartographer/{{ course_encoded }}" + "/tag/api";
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({scale: {pixels_per_yard: 1.0}, holes}),
       }).then(() => {
-        document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:var(--font-body);font-size:18px;color:var(--accent);">Saved! You can close this tab.</div>';
+        window.location.href = '/plugins/cartographer/' + encodeURIComponent(COURSE_NAME) + '/gallery';
       });
     });
   };
