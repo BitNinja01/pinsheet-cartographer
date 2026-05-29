@@ -26,7 +26,7 @@ def cartographer_app(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     (data_dir / "drafts").mkdir()
-    (data_dir / "plugins" / "cartographer").mkdir(parents=True)
+    (data_dir / "plugins" / "pinsheet-cartographer").mkdir(parents=True)
 
     db_path = str(data_dir / "pinsheet.db")
     set_db_path(db_path)
@@ -73,7 +73,7 @@ def cartographer_app(tmp_path, monkeypatch):
 
 def _write_test_geo(data_dir: Path, course_name: str, hole_data: dict) -> None:
     """Write a courses_geo.json file with test geometry in WGS84 lat/lon."""
-    path = data_dir / "plugins" / "cartographer" / "courses_geo.json"
+    path = data_dir / "plugins" / "pinsheet-cartographer" / "courses_geo.json"
     path.write_text(json.dumps({course_name: {"holes": hole_data}}))
 
 
@@ -207,7 +207,7 @@ class TestDataDirResolution:
         original = carto_data._server_data_dir
 
         try:
-            server_path = tmp_path / "custom_data" / "plugins" / "cartographer"
+            server_path = tmp_path / "custom_data" / "plugins" / "pinsheet-cartographer"
             carto_data._server_data_dir = server_path
             result = _get_plugin_data_dir()
             assert result == server_path
@@ -219,7 +219,7 @@ class TestDataDirResolution:
 def _write_test_osm(data_dir, course_name):
     """Write a minimal .osm file with one way for testing."""
     import pathlib
-    osm_dir = data_dir / "plugins" / "cartographer" / "osm"
+    osm_dir = data_dir / "plugins" / "pinsheet-cartographer" / "osm"
     osm_dir.mkdir(parents=True, exist_ok=True)
     osm_path = osm_dir / f"{course_name}.osm"
     osm_path.write_text("""<?xml version="1.0" encoding="UTF-8"?>

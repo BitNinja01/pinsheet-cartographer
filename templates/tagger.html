@@ -227,7 +227,7 @@ var API_BASE = "/plugins/cartographer/{{ course_encoded }}" + "/tag/api";
       const baseColor = typeColours[ftype] || '#888';
       const holes = featureAssignments.get(id);
       if (holes && holes.has(currentHole)) {
-        layer.setStyle({color: getComputedStyle(document.documentElement).getPropertyValue('--danger').trim(), weight: 3});
+        layer.setStyle({color: getComputedStyle(document.documentElement).getPropertyValue('--ps-warn').trim(), weight: 3});
       } else {
         layer.setStyle({color: baseColor, weight: 2});
       }

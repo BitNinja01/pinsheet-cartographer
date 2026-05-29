@@ -19,7 +19,7 @@ class TestGetPluginDataDir:
 
     def test_path_structure(self):
         result = _get_plugin_data_dir()
-        assert result.name == "cartographer"
+        assert result.name == "pinsheet-cartographer"
         assert result.parent.name == "plugins"
         assert result.parent.parent.name == "data"
 
@@ -30,7 +30,7 @@ class TestGetPluginDataDir:
         assert result.is_dir()
 
     def test_creates_directory_if_missing(self, tmp_path, monkeypatch):
-        target = tmp_path / "data" / "plugins" / "cartographer"
+        target = tmp_path / "data" / "plugins" / "pinsheet-cartographer"
         assert not target.exists()
         monkeypatch.setattr("cartographer.data._get_plugin_data_dir", lambda: target)
         target.mkdir(parents=True, exist_ok=True)

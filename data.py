@@ -1,6 +1,6 @@
 """Data access layer for pinsheet-cartographer.
 
-All files read/written by cartographer live under data/plugins/cartographer/.
+All files read/written by cartographer live under data/plugins/pinsheet-cartographer/.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ _server_data_dir: Path | None = None
 
 
 def _get_plugin_data_dir() -> Path:
-    """Resolve data/plugins/cartographer/, creating it if needed.
+    """Resolve data/plugins/pinsheet-cartographer/, creating it if needed.
 
     When running under PinSheet Server, uses the server-configured
     DATA_DIR. Otherwise falls back to parent-repo-relative resolution.
@@ -26,7 +26,7 @@ def _get_plugin_data_dir() -> Path:
         base = Path(sys.executable).parent / "data"
     else:
         base = Path(__file__).parent.parent.parent / "data"
-    d = base / "plugins" / "cartographer"
+        d = base / "plugins" / "pinsheet-cartographer"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

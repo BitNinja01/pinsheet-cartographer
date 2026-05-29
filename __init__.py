@@ -59,7 +59,7 @@ def _create_tables(db_path: Path) -> None:
 def register(app):
     # 1. Set server-aware data directory
     carto_data = importlib.import_module(__name__ + ".data")
-    carto_data._server_data_dir = Path(app.config["DATA_DIR"]) / "plugins" / "cartographer"
+    carto_data._server_data_dir = Path(app.config["DATA_DIR"]) / "plugins" / "pinsheet-cartographer"
     carto_data._server_data_dir.mkdir(parents=True, exist_ok=True)
 
     # 2. Install fonts (best-effort)
