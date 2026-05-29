@@ -39,14 +39,20 @@ _DEPS = ("cairosvg", "pypdf", "PIL", "numpy", "rasterio", "skimage")
 
 def _check_pdf_deps() -> str | None:
     missing = []
+    sys_deps = []
     for dep in _DEPS:
         try:
             __import__(dep)
         except ImportError:
             missing.append(dep)
+        except OSError:
+            sys_deps.append(dep)
+    parts = []
     if missing:
-        return f"Missing dependencies: {', '.join(missing)}. Run: pip install -r plugins/pinsheet-cartographer/requirements.txt"
-    return None
+        parts.append(f"Missing Python packages: {', '.join(missing)}. Run: pip install -r plugins/pinsheet-cartographer/requirements.txt")
+    if sys_deps:
+        parts.append(f"Missing system libraries for: {', '.join(sys_deps)}. Install libcairo2 (Debian: sudo apt install libcairo2, Fedora: sudo dnf install cairo)")
+    return "; ".join(parts) if parts else None
 
 
 def _get_settings():
