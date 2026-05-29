@@ -59,6 +59,30 @@ def _nodes_to_ring(node_ids: list[str], node_coords: dict[str, tuple[float, floa
     return ring
 
 
+def _parse_osm_xml(path: Path):
+    """Parse an .osm XML file, returning (root, iter_fn, findall_fn).
+
+    Uses lxml if available; falls back to stdlib xml.etree.ElementTree.
+    """
+    try:
+        from lxml import etree
+        tree = etree.parse(str(path))
+        root = tree.getroot()
+        return root, root.iter, lambda parent, tag: parent.findall(tag)
+    except ImportError:
+        import xml.etree.ElementTree as ET
+        tree = ET.parse(str(path))
+        root = tree.getroot()
+        def _iter(tag):
+            # Strip {*} prefix for stdlib ET (no namespace wildcard support)
+            stripped = tag[2:] if tag.startswith("{*}") else tag
+            return root.iter(stripped)
+        def _findall(parent, tag):
+            stripped = tag[2:] if tag.startswith("{*}") else tag
+            return parent.findall(stripped)
+        return root, _iter, _findall
+
+
 def parse_osm_file(path: Path) -> list[dict]:
     """Parse a .osm XML file and return a list of feature dicts.
 
@@ -68,14 +92,14 @@ def parse_osm_file(path: Path) -> list[dict]:
       - geometry: list of [lat, lon] pairs (polygon ring) or single [lat, lon] (point)
       - is_point: bool
       - tags: dict of raw OSM tags
+
+    Works with lxml or stdlib xml.etree.ElementTree.
     """
-    from lxml import etree
-    tree = etree.parse(str(path))
-    root = tree.getroot()
+    root, _iter, _findall = _parse_osm_xml(path)
 
     # Build node coordinate lookup
     node_coords: dict[str, tuple[float, float]] = {}
-    for node in root.iter("{*}node"):
+    for node in _iter("{*}node"):
         nid = node.get("id", "")
         lat = node.get("lat")
         lon = node.get("lon")
@@ -87,17 +111,17 @@ def parse_osm_file(path: Path) -> list[dict]:
     # First pass: collect all way geometry and tags
     way_node_refs: dict[str, list[str]] = {}
     way_tags: dict[str, dict[str, str]] = {}
-    for way in root.iter("{*}way"):
+    for way in _iter("{*}way"):
         osm_id = way.get("id", "")
-        node_ids = [nd.get("ref", "") for nd in way.findall("nd")]
-        tags = {tag.get("k", ""): tag.get("v", "") for tag in way.findall("tag")}
+        node_ids = [nd.get("ref", "") for nd in _findall(way, "nd")]
+        tags = {tag.get("k", ""): tag.get("v", "") for tag in _findall(way, "tag")}
         way_node_refs[osm_id] = node_ids
         way_tags[osm_id] = tags
 
     # Parse multipolygon relations
     used_way_ids: set[str] = set()
-    for relation in root.iter("{*}relation"):
-        tags = {tag.get("k", ""): tag.get("v", "") for tag in relation.findall("tag")}
+    for relation in _iter("{*}relation"):
+        tags = {tag.get("k", ""): tag.get("v", "") for tag in _findall(relation, "tag")}
         if tags.get("type") != "multipolygon" and relation.get("type") != "multipolygon":
             continue
         feature_type = _classify_tags(tags)
@@ -105,7 +129,7 @@ def parse_osm_file(path: Path) -> list[dict]:
             continue
         relation_id = relation.get("id", "")
         outer_idx = 0
-        for member in relation.findall("member"):
+        for member in _findall(relation, "member"):
             way_ref = member.get("ref", "")
             role = member.get("role", "")
             if role != "outer":
@@ -150,8 +174,8 @@ def parse_osm_file(path: Path) -> list[dict]:
             })
 
     # Extract nodes that are golf tees (points)
-    for node in root.iter("{*}node"):
-        tags = {tag.get("k", ""): tag.get("v", "") for tag in node.findall("tag")}
+    for node in _iter("{*}node"):
+        tags = {tag.get("k", ""): tag.get("v", "") for tag in _findall(node, "tag")}
         if tags.get("golf") == "tee":
             nid = node.get("id", "")
             lat = node.get("lat")
