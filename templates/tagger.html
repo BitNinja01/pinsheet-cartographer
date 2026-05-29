@@ -100,6 +100,8 @@ var API_BASE = "/plugins/cartographer/{{ course_encoded }}" + "/tag/api";
     water: '#1565C0', waterway: '#1565C0', rough: '#228B22', tee: '#555', path: '#FF8F00'
   };
 
+  const HIGHLIGHT_COLOR = '#ff3333';
+
   const accentColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
 
   let featureAssignments = new Map();
@@ -227,7 +229,7 @@ var API_BASE = "/plugins/cartographer/{{ course_encoded }}" + "/tag/api";
       const baseColor = typeColours[ftype] || '#888';
       const holes = featureAssignments.get(id);
       if (holes && holes.has(currentHole)) {
-        layer.setStyle({color: getComputedStyle(document.documentElement).getPropertyValue('--ps-warn').trim(), weight: 3});
+        layer.setStyle({color: HIGHLIGHT_COLOR, weight: 3});
       } else {
         layer.setStyle({color: baseColor, weight: 2});
       }
