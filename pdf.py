@@ -345,7 +345,8 @@ def generate_book(
     status_callback: optional function(message) for status text updates
     data_dir: override data directory for courses.json; if None, auto-resolve.
     courses_data: pre-loaded courses dict; if given, skip reading courses.json.
-    rounds_data: pre-loaded rounds list; if given, skip reading rounds files.
+    rounds_data: pre-loaded rounds list (must be pre-filtered to this course);
+                  if given, skip reading rounds files.
     """
     if settings is None:
         settings = {}
