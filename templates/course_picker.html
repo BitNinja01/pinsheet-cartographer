@@ -46,9 +46,10 @@
                     {% if c.has_osm %}
                     <a href="/plugins/cartographer/{{ c.name }}/gallery" class="ps-btn ps-btn--ghost">View</a>
                     <a href="/plugins/cartographer/{{ c.name }}/tag" class="ps-btn ps-btn--ghost">Tag</a>
-                    {% endif %}
+                    {% else %}
                     <button class="ps-btn ps-btn--ghost upload-osm-btn" data-course="{{ c.name }}">Upload OSM</button>
                     <input type="file" accept=".osm" class="upload-osm-input" data-course="{{ c.name }}" style="display:none">
+                    {% endif %}
                 </td>
                 <td class="carto-delete-col">
                     <button class="ps-btn ps-btn--ghost btn-delete-pdf" data-course="{{ c.name }}">Delete</button>
