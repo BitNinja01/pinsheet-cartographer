@@ -15,6 +15,15 @@ from flask import (
 
 from .data import get_osm_path, load_courses_geo
 
+import json
+import sqlite3
+import threading
+import time
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+
+from flask import Response, abort, send_file
+
 log = logging.getLogger("pinsheet")
 
 bp = Blueprint(
@@ -22,6 +31,22 @@ bp = Blueprint(
     __name__,
     url_prefix="/plugins/cartographer",
 )
+
+_pdf_jobs: dict[str, dict] = {}
+
+_DEPS = ("cairosvg", "pypdf", "PIL", "numpy", "rasterio", "skimage")
+
+
+def _check_pdf_deps() -> str | None:
+    missing = []
+    for dep in _DEPS:
+        try:
+            __import__(dep)
+        except ImportError:
+            missing.append(dep)
+    if missing:
+        return f"Missing dependencies: {', '.join(missing)}. Run: pip install -r plugins/pinsheet-cartographer/requirements.txt"
+    return None
 
 
 def _get_settings():
@@ -254,3 +279,185 @@ def upload_osm(course):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return jsonify({"status": "ok"})
+
+
+@bp.route("/<string:course>/pdf")
+def pdf_export(course):
+    from .data import _get_plugin_data_dir
+    path = _get_plugin_data_dir()
+    geo_path = path / "courses_geo.json"
+    has_geo = geo_path.exists()
+
+    db = sqlite3.connect(str(current_app.config["DB_PATH"]))
+    row = db.execute("SELECT data FROM courses WHERE name = ?", (course,)).fetchone()
+    tees = []
+    if row:
+        course_data = json.loads(row[0])
+        tees = sorted(course_data.get("tees", {}).keys())
+    db.close()
+
+    return render_template(
+        "pdf_export.html",
+        course_name=course,
+        course_encoded=quote(course),
+        tees=tees,
+        has_geometry=has_geo,
+        settings=_get_settings(),
+        current_page="cartographer",
+    )
+
+
+@bp.route("/<string:course>/pdf/generate", methods=["POST"])
+def pdf_generate(course):
+    dep_err = _check_pdf_deps()
+    if dep_err:
+        return jsonify({"status": "error", "error": dep_err}), 400
+
+    from .data import load_courses_geo, _get_plugin_data_dir as _pd
+    geo = load_courses_geo()
+    if course not in geo:
+        return jsonify({"status": "error", "error": f"No geometry data for '{course}'"}), 400
+
+    safe = course.lower().replace(" ", "_").replace("'", "").replace('"', "")
+    job_id = f"{safe}_{int(time.time())}"
+    now = datetime.now(timezone.utc).isoformat()
+
+    data_dir = current_app.config["DATA_DIR"]
+
+    db = sqlite3.connect(str(current_app.config["DB_PATH"]))
+    db.row_factory = sqlite3.Row
+    course_row = db.execute("SELECT data FROM courses WHERE name = ?", (course,)).fetchone()
+    if course_row:
+        courses_data = {course: json.loads(course_row[0])}
+    else:
+        courses_data = {}
+    round_rows = db.execute(
+        "SELECT * FROM rounds WHERE course_name = ? ORDER BY date", (course,)
+    ).fetchall()
+    rounds_data = []
+    for rr in round_rows:
+        rdict = {
+            "date": rr["date"],
+            "course": rr["course_name"],
+            "holes_selection": rr["holes_played"] or "all",
+            "handicap_index": rr["computed_handicap"] or "15.0",
+            "total_gross": rr["total_gross"] or "0",
+            "total_putts": rr["total_putts"] or "0",
+            "holes": json.loads(rr["holes"]) if rr["holes"] else {},
+        }
+        rounds_data.append(rdict)
+    db.close()
+
+    output_dir = _pd() / "yardage_books" / safe
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    job = {
+        "status": "running",
+        "current": 0,
+        "total": 25,
+        "detail": "Starting...",
+        "error": None,
+        "output_dir": output_dir,
+        "started_at": time.time(),
+    }
+    _pdf_jobs[job_id] = job
+
+    req_settings = request.get_json() or {}
+
+    def _generate_job():
+        try:
+            from .pdf import generate_book
+
+            slot1 = req_settings.get("slot1", "green_grid")
+            slot2 = req_settings.get("slot2", "stats_panel")
+            show_stats = req_settings.get("show_stats", True)
+            pdf_settings = req_settings.get("settings", {})
+
+            def _progress(current, total):
+                job["current"] = current
+                job["total"] = total
+
+            def _status(msg):
+                job["detail"] = msg
+
+            generate_book(
+                course_name=course,
+                output_dir=output_dir,
+                slot1_mode=slot1,
+                slot2_mode=slot2,
+                show_calculated_stats=show_stats,
+                settings=pdf_settings,
+                progress_callback=_progress,
+                status_callback=_status,
+                data_dir=data_dir,
+                courses_data=courses_data,
+                rounds_data=rounds_data,
+            )
+
+            import shutil
+            zip_path = output_dir / f"{safe}.zip"
+            shutil.make_archive(str(zip_path.with_suffix("")), "zip", output_dir / "booklets")
+
+            try:
+                _db = sqlite3.connect(str(current_app.config["DB_PATH"]))
+                _db.execute(
+                    "UPDATE plugin_cartographer_geometry SET pdf_generated_at = ? WHERE course_name = ?",
+                    (now, course),
+                )
+                if _db.total_changes == 0:
+                    _db.execute(
+                        "INSERT INTO plugin_cartographer_geometry (user_id, course_name, pdf_generated_at) VALUES (?, ?, ?)",
+                        (1, course, now),
+                    )
+                _db.commit()
+                _db.close()
+            except Exception:
+                log.warning("cartographer: failed to write pdf_generated_at", exc_info=True)
+
+            job["status"] = "complete"
+
+        except Exception as e:
+            log.exception("cartographer: PDF generation failed for %s", course)
+            job["status"] = "error"
+            job["error"] = str(e)
+
+    t = threading.Thread(target=_generate_job, daemon=True)
+    t.start()
+
+    return jsonify({"status": "ok", "job_id": job_id})
+
+
+@bp.route("/<string:course>/pdf/stream/<job_id>")
+def pdf_stream(course, job_id):
+    def _generate():
+        while True:
+            job = _pdf_jobs.get(job_id)
+            if job is None:
+                yield f"event: error\ndata: {json.dumps('Job not found')}\n\n"
+                return
+            if job["status"] == "running":
+                yield f"event: progress\ndata: {json.dumps({'current': job['current'], 'total': job['total']})}\n\n"
+                yield f"event: status\ndata: {json.dumps(job['detail'])}\n\n"
+            elif job["status"] == "complete":
+                yield f"event: complete\ndata: {json.dumps({'download_url': f'/plugins/cartographer/{quote(course)}/pdf/download'})}\n\n"
+                return
+            elif job["status"] == "error":
+                yield f"event: error\ndata: {json.dumps(job['error'])}\n\n"
+                return
+            time.sleep(0.5)
+
+    return Response(_generate(), mimetype="text/event-stream")
+
+
+@bp.route("/<string:course>/pdf/download")
+def pdf_download(course):
+    from .data import _get_plugin_data_dir
+    safe = course.lower().replace(" ", "_").replace("'", "").replace('"', "")
+    zip_path = _get_plugin_data_dir() / "yardage_books" / safe / f"{safe}.zip"
+    if not zip_path.exists():
+        abort(404, "PDF not found. Generate it first.")
+    return send_file(
+        zip_path,
+        as_attachment=True,
+        download_name=f"{safe}_yardage_book.zip",
+    )
