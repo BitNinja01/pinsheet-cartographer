@@ -43,6 +43,7 @@ def course_picker():
     try:
         import sqlite3
         _db = sqlite3.connect(str(current_app.config["DB_PATH"]))
+        _db.row_factory = sqlite3.Row
         _server_names = {row["name"] for row in _db.execute("SELECT name FROM courses").fetchall()}
         _db.close()
     except Exception:
