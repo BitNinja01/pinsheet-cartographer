@@ -350,6 +350,7 @@ def _do_pdf_generate(course):
     now = datetime.now(timezone.utc).isoformat()
 
     data_dir = current_app.config["DATA_DIR"]
+    db_path = current_app.config["DB_PATH"]
 
     user_id = current_user.id if current_user and not current_user.is_anonymous else 1
 
@@ -432,7 +433,7 @@ def _do_pdf_generate(course):
             shutil.make_archive(str(zip_path.with_suffix("")), "zip", output_dir / "booklets")
 
             try:
-                _db = sqlite3.connect(str(current_app.config["DB_PATH"]))
+                _db = sqlite3.connect(str(db_path))
                 _db.execute(
                     "UPDATE plugin_cartographer_geometry SET pdf_generated_at = ? WHERE course_name = ?",
                     (now, course),
