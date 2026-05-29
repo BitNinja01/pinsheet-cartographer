@@ -160,10 +160,10 @@ def handle_get_features(course_name: str):
 
     try:
         features = parse_osm_file(osm_path)
+        split_config = _load_split_config(course_name)
+        _apply_splits(features, split_config)
     except ImportError:
-        return jsonify({"type": "FeatureCollection", "features": [], "course_name": course_name, "bounds": None, "error": "Missing dependency: install lxml"})
-    split_config = _load_split_config(course_name)
-    _apply_splits(features, split_config)
+        return jsonify({"type": "FeatureCollection", "features": [], "course_name": course_name, "bounds": None, "error": "Missing dependency"})
 
     golf_types = {"fairway", "green", "bunker", "tee"}
     lats, lons = [], []
