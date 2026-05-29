@@ -45,6 +45,7 @@ def cartographer_app(tmp_path, monkeypatch):
     app.config["DATA_DIR"] = data_dir
     app._plugin_blocks = {}
     app._plugin_nav = []
+    app._plugin_course_actions = []
 
     plugins_dir = Path(__file__).parent.parent.parent  # plugins/
     monkeypatch.setattr(plugin_loader, "_plugins_dir", lambda: plugins_dir)

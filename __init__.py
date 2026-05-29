@@ -168,14 +168,29 @@ def register(app):
         (app._plugin_blocks.get("head", "") + "\n" + head_tag).strip()
     )
 
-    # 7. Add nav link
+    # 7. Register course actions (buttons on the /courses page and course detail page)
+    from urllib.parse import quote as _quote
+    app._plugin_course_actions.append({
+        "label": "Holes",
+        "url_maker": lambda name: f"/plugins/cartographer/{_quote(name)}/gallery",
+    })
+    app._plugin_course_actions.append({
+        "label": "Tag",
+        "url_maker": lambda name: f"/plugins/cartographer/{_quote(name)}/tag",
+    })
+    app._plugin_course_actions.append({
+        "label": "PDF",
+        "url_maker": lambda name: f"/plugins/cartographer/{_quote(name)}/pdf",
+    })
+
+    # 8. Add nav link
     app._plugin_nav.append({
         "label": "Course Maps",
         "url": "/plugins/cartographer",
         "page_id": "cartographer",
     })
 
-    # 8. Default settings
+    # 9. Default settings
     app.config.setdefault("plugins.cartographer.yardage_arcs", True)
     app.config.setdefault("plugins.cartographer.yardage_arc_distances", [100, 125, 150, 175, 200])
 
@@ -196,3 +211,5 @@ def unregister(app):
         entry for entry in app._plugin_nav
         if entry.get("page_id") != "cartographer"
     ]
+
+    app._plugin_course_actions.clear()
