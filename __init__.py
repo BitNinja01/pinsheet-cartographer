@@ -56,6 +56,17 @@ def _create_tables(db_path: Path) -> None:
     db.close()
 
 
+def _migrate_tables(db_path: Path) -> None:
+    db = sqlite3.connect(str(db_path))
+    try:
+        db.execute(
+            "ALTER TABLE plugin_cartographer_geometry ADD COLUMN pdf_generated_at TEXT"
+        )
+    except sqlite3.OperationalError:
+        pass
+    db.close()
+
+
 def register(app):
     # 1. Set server-aware data directory
     carto_data = importlib.import_module(__name__ + ".data")
@@ -73,6 +84,11 @@ def register(app):
         _create_tables(app.config["DB_PATH"])
     except Exception:
         log.warning("cartographer: DB table creation failed", exc_info=True)
+
+    try:
+        _migrate_tables(app.config["DB_PATH"])
+    except Exception:
+        log.warning("cartographer: table migration failed", exc_info=True)
 
     # 4. Log XML parser availability for diagnostic
     try:
