@@ -1,7 +1,11 @@
 """Route handler functions for the cartographer visual tagging UI."""
 from __future__ import annotations
 
+import logging
+
 from flask import jsonify
+
+log = logging.getLogger("pinsheet")
 
 from ..data import get_osm_path, load_courses_geo_raw, save_courses_geo
 from ..osm import parse_osm_file
@@ -162,8 +166,10 @@ def handle_get_features(course_name: str):
         features = parse_osm_file(osm_path)
         split_config = _load_split_config(course_name)
         _apply_splits(features, split_config)
-    except ImportError:
-        return jsonify({"type": "FeatureCollection", "features": [], "course_name": course_name, "bounds": None, "error": "Missing dependency"})
+    except ImportError as _exc:
+        log.warning("cartographer: handle_get_features import error — %s", _exc)
+        log.debug("cartographer: import error traceback", exc_info=True)
+        return jsonify({"type": "FeatureCollection", "features": [], "course_name": course_name, "bounds": None, "error": str(_exc)})
 
     golf_types = {"fairway", "green", "bunker", "tee"}
     lats, lons = [], []
