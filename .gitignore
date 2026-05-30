@@ -168,3 +168,6 @@ cython_debug/
 tagger/static/leaflet/*
 !tagger/static/leaflet/.gitkeep
 AGENTS.md
+
+# Internal architecture improvement plans
+CODEBASE_IMPROVEMENTS.md

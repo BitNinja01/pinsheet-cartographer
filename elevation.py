@@ -1,6 +1,7 @@
 """Elevation data access and green contour computation."""
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,8 @@ import rasterio
 from rasterio.crs import CRS
 from rasterio.warp import transform as warp_transform
 import requests
+
+from .geometry import chaikin_smooth_open
 
 
 def compute_contours(
@@ -272,47 +275,6 @@ def _ring_to_crs(
     return list(xs), list(ys)
 
 
-def _grid_paths_to_crs(
-    paths: list[np.ndarray],
-    transform: Any,
-) -> list[np.ndarray]:
-    """Convert contour paths from grid-cell indices to DEM CRS coordinates."""
-    a, b, c, d, e, f = (transform.a, transform.b, transform.c,
-                         transform.d, transform.e, transform.f)
-    result = []
-    for path in paths:
-        if len(path) == 0:
-            continue
-        xs = c + path[:, 0] * a + path[:, 1] * b
-        ys = f + path[:, 0] * d + path[:, 1] * e
-        result.append(np.column_stack([xs, ys]))
-    return result
-
-
-def _contour_paths_to_wgs84(
-    paths: list[np.ndarray],
-    src_crs: CRS,
-) -> list[np.ndarray]:
-    """Transform contour paths from DEM CRS to WGS84 [lat, lon] (OSM convention).
-
-    rasterio.warp.transform returns (xs, ys) = (lon, lat) for EPSG:4326.
-    """
-    if not paths:
-        return []
-    try:
-        result = []
-        for path in paths:
-            if len(path) == 0:
-                continue
-            xs, ys = warp_transform(
-                src_crs, CRS.from_epsg(4326),
-                path[:, 0].tolist(), path[:, 1].tolist(),
-            )
-            result.append(np.column_stack([np.array(ys), np.array(xs)]))
-        return result
-    except Exception:
-        return paths
-
 
 def _in_green_mask(
     x_2d: np.ndarray, y_2d: np.ndarray,
@@ -340,87 +302,51 @@ def _in_green_mask(
     return mask if mask.any() else None
 
 
-def compute_green_contours(
-    green_ring: list[list[float]],
-    dem_path: Path,
-    max_contours: int = 8,
-) -> dict:
-    """Compute contour paths for a single green.
+def compute_slot_contours(
+    shading_img: Image.Image,
+    svg_bx: float, svg_by: float,
+    svg_bw: float, svg_bh: float,
+    render_scale: float = 2.0,
+    num_levels: int = 12,
+) -> list[list[list[float]]]:
+    """Extract contour paths from a grayscale elevation-shading image.
 
-    Only the green's own elevation range is used for normalisation (auto‑levels),
-    so subtle topography on flat greens gets the full 0‑1 contour space.
-    Contour paths are smoothed downstream via Chaikin smoothing.
-
-    Args:
-        green_ring: [lat, lon] vertices of the green polygon.
-        dem_path: Path to cached 1m GeoTIFF.
-        max_contours: Maximum contour levels (default 8).
-
-    Returns {"contours": [{"path": [[lat, lon], ...], "z": float}, ...]}
-    or {"contours": []} if DEM data is insufficient.
+    Takes the PIL Image from compute_elevation_shading() and extracts
+    contour paths in SVG slot pixel coordinates. Applies decimation,
+    Chaikin smoothing, and length filtering.
     """
-    sampled = sample_green_elevation(green_ring, dem_path)
-    if sampled is None:
-        return {"contours": []}
-
-    x_2d, y_2d, z, win_transform = sampled
-
-    if np.all(np.isnan(z)):
-        return {"contours": []}
-
-    # Get DEM CRS
-    with rasterio.open(dem_path) as src:
-        src_crs = src.crs
-
-    # Auto-levels: compute z_min/z_max from in-green cells only
-    # Falls back to full-window range if no cells intersect (test data edge case).
-    green_mask = _in_green_mask(x_2d, y_2d, z, green_ring, src_crs)
-    if green_mask is not None:
-        z_green = z[green_mask]
-        z_min, z_max = np.nanmin(z_green), np.nanmax(z_green)
-    else:
-        z_min, z_max = np.nanmin(z), np.nanmax(z)
-    if z_max - z_min < 0.10:
-        return {"contours": []}
-
-    elevation_range = z_max - z_min
-    num_contours = max(2, min(max_contours, int(elevation_range / 0.2)))
-
-    # Upsample DEM (4x) for smoother contour paths, then blur to suppress
-    # interpolation faceting that marching squares would trace as noise.
-    z, win_transform = _upsample_dem(z, win_transform, factor=4)
-    if green_mask is not None:
-        green_mask_big = _upsample_mask(green_mask, factor=4)
-    else:
-        green_mask_big = None
-    z = _gaussian_blur(z, sigma=1.5)
-
-    if green_mask_big is not None:
-        z_green_big = z[green_mask_big]
-        z_min, z_max = np.nanmin(z_green_big), np.nanmax(z_green_big)
-
-    z_norm = np.clip((z - z_min) / (z_max - z_min), 0.0, 1.0)
-
-    levels = [i / (num_contours + 1) for i in range(1, num_contours + 1)]
-
-    raw = compute_contours(z_norm, levels, merge_dist=1.0)
-    if not raw:
-        return {"contours": []}
-
-    result: list[dict] = []
-    z_min_f, z_max_f = float(z_min), float(z_max)
-    for norm_level, grid_paths in raw.items():
-        actual_z = z_min_f + float(norm_level) * (z_max_f - z_min_f)
-        crs_paths = _grid_paths_to_crs(grid_paths, win_transform)
-        wgs84_paths = _contour_paths_to_wgs84(crs_paths, src_crs)
-        for path_array in wgs84_paths:
-            if len(path_array) >= 2:
-                result.append({
-                    "path": [[float(x), float(y)] for x, y in path_array],
-                    "z": round(actual_z, 1),
-                })
-
-    return {"contours": result}
+    img_contour = shading_img.resize(
+        (max(1, int(svg_bw * render_scale)),
+         max(1, int(svg_bh * render_scale))),
+        Image.LANCZOS,
+    )
+    z_arr = np.array(img_contour, dtype=float)
+    levels = [i * 255.0 / (num_levels + 1) for i in range(1, num_levels + 1)]
+    raw_contours = compute_contours(z_arr, levels)
+    contour_paths: list[list[list[float]]] = []
+    for level in sorted(raw_contours):
+        for polyline in raw_contours[level]:
+            path = [[svg_bx + float(p[0]) / render_scale,
+                     svg_by + float(p[1]) / render_scale]
+                    for p in polyline]
+            if len(path) >= 2:
+                path_tuples = [(p[0], p[1]) for p in path]
+                if len(path_tuples) >= 2 * 33:
+                    decimated = path_tuples[::33]
+                    if decimated[-1] != path_tuples[-1]:
+                        decimated.append(path_tuples[-1])
+                else:
+                    decimated = path_tuples
+                smoothed = chaikin_smooth_open(decimated, iterations=3)
+                if len(smoothed) >= 2:
+                    total_len = sum(
+                        math.hypot(smoothed[i][0] - smoothed[i-1][0],
+                                   smoothed[i][1] - smoothed[i-1][1])
+                        for i in range(1, len(smoothed))
+                    )
+                    if total_len >= 30.0:
+                        contour_paths.append([[x, y] for x, y in smoothed])
+    return contour_paths
 
 
 def compute_elevation_shading(
@@ -470,44 +396,3 @@ def compute_elevation_shading(
     z_uint8 = (z_norm * 255).astype(np.uint8)
 
     return Image.fromarray(z_uint8, mode="L")
-
-
-def compute_all_green_contours(course_name: str, holes_geo: dict) -> dict:
-    """Compute and cache green contours for all holes in a course.
-
-    Returns {hole_num: {"contours": [{"path": [[lat, lon], ...], "z": ...}, ...]}}
-    or empty dict if DEM is unavailable.
-    """
-    from .data import get_contours_cache_path
-    import json
-
-    cache_path = get_contours_cache_path(course_name)
-    if cache_path.exists():
-        return json.loads(cache_path.read_text())
-
-    dem_path = get_course_dem(course_name, holes_geo)
-    if dem_path is None:
-        return {}
-
-    result: dict[str, dict] = {}
-    for hole_key, geom in holes_geo.items():
-        greens = geom.get("green", [])
-        if not greens:
-            continue
-        contours = compute_green_contours(greens[0], dem_path)
-        if contours.get("contours"):
-            result[hole_key] = contours
-
-    cache_path.write_text(json.dumps(result))
-    return result
-
-
-def load_contours_cache(course_name: str) -> dict:
-    """Load cached contours. Returns {} on cache miss."""
-    from .data import get_contours_cache_path
-    import json
-
-    path = get_contours_cache_path(course_name)
-    if path.exists():
-        return json.loads(path.read_text())
-    return {}
