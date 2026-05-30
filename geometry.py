@@ -254,6 +254,44 @@ def get_green_rotation(hole_geom: dict) -> float:
     return -90.0 - angle_to_green
 
 
+def rotate_ring(ring: list, angle_deg: float, origin: tuple[float, float]) -> list:
+    cx, cy = origin
+    rad = math.radians(angle_deg)
+    cos_a, sin_a = math.cos(rad), math.sin(rad)
+    return [[
+        (x - cx) * cos_a - (y - cy) * sin_a + cx,
+        (x - cx) * sin_a + (y - cy) * cos_a + cy
+    ] for x, y in ring]
+
+
+def rotate_point(x: float, y: float, angle_deg: float, origin: tuple[float, float]) -> tuple[float, float]:
+    cx, cy = origin
+    rad = math.radians(angle_deg)
+    cos_a, sin_a = math.cos(rad), math.sin(rad)
+    dx = x - cx
+    dy = y - cy
+    return (dx * cos_a - dy * sin_a + cx, dx * sin_a + dy * cos_a + cy)
+
+
+def compute_fit(
+    min_x: float, min_y: float, max_x: float, max_y: float,
+    canvas_w: float, canvas_h: float,
+    padding: float = 20.0, left_bias: float = 0.0,
+) -> tuple[float, float, float]:
+    geom_w = max_x - min_x or 1.0
+    geom_h = max_y - min_y or 1.0
+    avail_w = canvas_w - 2 * padding
+    avail_h = canvas_h - 2 * padding
+    scale = min(avail_w / geom_w, avail_h / geom_h)
+    offset_x = padding + (avail_w - geom_w * scale) / 2 - min_x * scale
+    offset_x -= left_bias
+    left_edge = min_x * scale + offset_x
+    if left_edge < padding:
+        offset_x += padding - left_edge
+    offset_y = padding + (avail_h - geom_h * scale) / 2 - min_y * scale
+    return scale, offset_x, offset_y
+
+
 def fit_hole(
     hole_geom: dict,
     canvas_width: float,
@@ -285,37 +323,19 @@ def fit_hole(
     else:
         rotation_deg = get_green_rotation(hole_geom)
 
-    def rotate_point(px: float, py: float) -> tuple[float, float]:
-        rad = math.radians(rotation_deg)
-        rx = (px - hole_cx) * math.cos(rad) - (py - hole_cy) * math.sin(rad) + hole_cx
-        ry = (px - hole_cx) * math.sin(rad) + (py - hole_cy) * math.cos(rad) + hole_cy
-        return rx, ry
-
-    def rotate_ring(ring: list) -> list:
-        return [list(rotate_point(x, y)) for x, y in ring]
-
+    origin = (hole_cx, hole_cy)
     rotated: dict[str, Any] = {}
     for feature_type in ("fairway", "green", "bunkers", "water", "waterways", "rough_boundary", "paths", "contours"):
-        rotated[feature_type] = [rotate_ring(r) for r in hole_geom.get(feature_type, [])]
+        rotated[feature_type] = [rotate_ring(r, rotation_deg, origin) for r in hole_geom.get(feature_type, [])]
     rotated["tee_boxes"] = {
-        name: list(rotate_point(x, y))
+        name: list(rotate_point(x, y, rotation_deg, origin))
         for name, (x, y) in hole_geom.get("tee_boxes", {}).items()
     }
 
-    min_x, min_y, max_x, max_y = get_hole_bounds(rotated)
-    geom_w = max_x - min_x or 1.0
-    geom_h = max_y - min_y or 1.0
-    avail_w = canvas_width - 2 * padding
-    avail_h = canvas_height - 2 * padding
-    scale_factor = min(avail_w / geom_w, avail_h / geom_h)
-
-    offset_x = padding + (avail_w - geom_w * scale_factor) / 2 - min_x * scale_factor
-    offset_x -= left_bias
-    # Clamp: ensure the left edge of the geometry stays >= padding
-    left_edge = min_x * scale_factor + offset_x
-    if left_edge < padding:
-        offset_x += padding - left_edge
-    offset_y = padding + (avail_h - geom_h * scale_factor) / 2 - min_y * scale_factor
+    mr_x, mr_y, mx_x, mx_y = get_hole_bounds(rotated)
+    scale_factor, offset_x, offset_y = compute_fit(
+        mr_x, mr_y, mx_x, mx_y, canvas_width, canvas_height, padding, left_bias,
+    )
 
     def transform_point(px: float, py: float) -> tuple[float, float]:
         return px * scale_factor + offset_x, py * scale_factor + offset_y
