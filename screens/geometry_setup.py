@@ -57,7 +57,7 @@ class GeometrySetupScreen(Screen):
 
     def _check_existing_geometry(self) -> None:
         try:
-            from cartographer.data import load_courses_geo
+            from ..data import load_courses_geo
         except ImportError:
             return
 
@@ -101,8 +101,8 @@ class GeometrySetupScreen(Screen):
 
     def _start_tagger(self, osm_file: Path) -> None:
         try:
-            from cartographer.data import get_osm_path
-            from cartographer.tagger.server import start_tagger
+            from ..data import get_osm_path
+            from ..tagger.server import start_tagger
         except ImportError as e:
             self.query_one("#geometry-error", Label).update(
                 f"[bold red]Could not import tagger:[/] {e}"
@@ -162,7 +162,7 @@ class GeometrySetupScreen(Screen):
             # Tagger saved — navigate to gallery
             self._shutdown_event = None
             try:
-                from cartographer.screens.course_gallery import CourseGalleryScreen
+                from .course_gallery import CourseGalleryScreen
             except ImportError:
                 self.app.pop_screen()
                 return
