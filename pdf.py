@@ -318,6 +318,52 @@ def _get_hole_render_data(
     }
 
 
+def _compose_standard_sheet(
+    top_hole: int,
+    bottom_hole: int,
+    holes_geo: dict,
+    scale_data: dict,
+    settings: dict,
+    course_ps: dict,
+    slot1_mode: str,
+    slot2_mode: str,
+    dem_path: Path | None,
+    contour_cache: dict,
+    status_callback: callable,
+    stats_data: dict | None,
+) -> str:
+    """Render a standard sheet: top-hole diagram + bottom-hole data slot."""
+    top_hd = _get_hole_render_data(
+        top_hole, holes_geo, scale_data, settings, course_ps,
+        slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
+        status_callback=status_callback, compute_slots=False,
+    )
+    bottom_hd = _get_hole_render_data(
+        bottom_hole, holes_geo, scale_data, settings, course_ps,
+        slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
+        status_callback=status_callback,
+    )
+    if top_hd:
+        top_svg = render_hole_page(
+            hole_svg=top_hd["hole_svg"], hole_num=top_hole, par=top_hd["par"],
+            tee_yardages=top_hd["tee_yardages"],
+        )
+        bottom_svg = render_bottom_slots(
+            slot1_content=slot1_mode, slot2_content=slot2_mode,
+            slot1_svg=bottom_hd["slot1_svg"] if bottom_hd else "",
+            slot2_svg=bottom_hd["slot2_svg"] if bottom_hd else "",
+            stats_data=stats_data,
+            hole_num=bottom_hole if bottom_hd else top_hole,
+        )
+        return compose_sheet(top_svg, bottom_svg)
+    else:
+        import svgwrite as svg
+        dwg = svg.Drawing(size=(f"{PAGE_W}pt", f"{PAGE_CONTENT_H}pt"), viewBox=f"0 0 {PAGE_W} {PAGE_CONTENT_H}")
+        dwg.add(dwg.rect(insert=(0, 0), size=(PAGE_W, PAGE_CONTENT_H), fill="white"))
+        blank = dwg.tostring()
+        return compose_sheet(blank, blank)
+
+
 def generate_book(
     course_name: str,
     output_dir: Path,
@@ -458,35 +504,10 @@ def generate_book(
             top_hole = 9 - page_idx
             bottom_hole = 9 if page_idx == 0 else 18 - top_hole
             fname = f"{safe_course}_{top_hole}_{bottom_hole}.pdf"
-            top_hd = _get_hole_render_data(
-                top_hole, holes_geo, scale_data, settings, course_ps,
-                slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
-                status_callback=status_callback, compute_slots=False,
+            svg_str = _compose_standard_sheet(
+                top_hole, bottom_hole, holes_geo, scale_data, settings, course_ps,
+                slot1_mode, slot2_mode, dem_path, contour_cache, status_callback, stats_data,
             )
-            bottom_hd = _get_hole_render_data(
-                bottom_hole, holes_geo, scale_data, settings, course_ps,
-                slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
-                status_callback=status_callback,
-            )
-            if top_hd:
-                top_svg = render_hole_page(
-                    hole_svg=top_hd["hole_svg"], hole_num=top_hole, par=top_hd["par"],
-                    tee_yardages=top_hd["tee_yardages"],
-                )
-                bottom_svg = render_bottom_slots(
-                    slot1_content=slot1_mode, slot2_content=slot2_mode,
-                    slot1_svg=bottom_hd["slot1_svg"] if bottom_hd else "",
-                    slot2_svg=bottom_hd["slot2_svg"] if bottom_hd else "",
-                    stats_data=stats_data,
-                    hole_num=bottom_hole if bottom_hd else top_hole,
-                )
-                svg_str = compose_sheet(top_svg, bottom_svg)
-            else:
-                import svgwrite as svg
-                dwg = svg.Drawing(size=(f"{PAGE_W}pt", f"{PAGE_CONTENT_H}pt"), viewBox=f"0 0 {PAGE_W} {PAGE_CONTENT_H}")
-                dwg.add(dwg.rect(insert=(0, 0), size=(PAGE_W, PAGE_CONTENT_H), fill="white"))
-                blank = dwg.tostring()
-                svg_str = compose_sheet(blank, blank)
 
         elif page_idx == 9:
             fname = f"{safe_course}_chart_18.pdf"
@@ -514,35 +535,10 @@ def generate_book(
             top_hole = page_idx
             bottom_hole = 18 - top_hole
             fname = f"{safe_course}_{top_hole}_{bottom_hole}.pdf"
-            top_hd = _get_hole_render_data(
-                top_hole, holes_geo, scale_data, settings, course_ps,
-                slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
-                status_callback=status_callback, compute_slots=False,
+            svg_str = _compose_standard_sheet(
+                top_hole, bottom_hole, holes_geo, scale_data, settings, course_ps,
+                slot1_mode, slot2_mode, dem_path, contour_cache, status_callback, stats_data,
             )
-            bottom_hd = _get_hole_render_data(
-                bottom_hole, holes_geo, scale_data, settings, course_ps,
-                slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
-                status_callback=status_callback,
-            )
-            if top_hd:
-                top_svg = render_hole_page(
-                    hole_svg=top_hd["hole_svg"], hole_num=top_hole, par=top_hd["par"],
-                    tee_yardages=top_hd["tee_yardages"],
-                )
-                bottom_svg = render_bottom_slots(
-                    slot1_content=slot1_mode, slot2_content=slot2_mode,
-                    slot1_svg=bottom_hd["slot1_svg"] if bottom_hd else "",
-                    slot2_svg=bottom_hd["slot2_svg"] if bottom_hd else "",
-                    stats_data=stats_data,
-                    hole_num=bottom_hole if bottom_hd else top_hole,
-                )
-                svg_str = compose_sheet(top_svg, bottom_svg)
-            else:
-                import svgwrite as svg
-                dwg = svg.Drawing(size=(f"{PAGE_W}pt", f"{PAGE_CONTENT_H}pt"), viewBox=f"0 0 {PAGE_W} {PAGE_CONTENT_H}")
-                dwg.add(dwg.rect(insert=(0, 0), size=(PAGE_W, PAGE_CONTENT_H), fill="white"))
-                blank = dwg.tostring()
-                svg_str = compose_sheet(blank, blank)
 
         elif page_idx == 18:
             fname = f"{safe_course}_18_notes.pdf"
