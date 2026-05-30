@@ -72,71 +72,30 @@ def _clip_contour_to_green(
         return []
 
 
-def _get_hole_render_data(
+def _compute_slot_content(
     hole_num: int,
+    hole_geom: dict,
+    slot_context_features: dict,
     holes_geo: dict,
-    scale_data: dict,
     settings: dict,
-    course_ps: dict,
+    dem_path: Path | None,
+    contour_cache: dict[int, list] | None,
+    status_callback: callable,
     slot1_mode: str,
     slot2_mode: str,
-    dem_path: Path | None = None,
-    contour_cache: dict[int, list] | None = None,
-    status_callback: callable = None,
-    compute_slots: bool = True,
-) -> dict | None:
-    """Render a single hole and return raw data for page composition.
-
-    Returns dict with keys: hole_svg, par, tee_yardages, slot1_svg, slot2_svg
-    or None if hole geometry is missing.
-
-    dem_path: optional path to cached DEM GeoTIFF for elevation shading.
-    compute_slots: if False, skip green-grid/shading/contour computation
-                   (used for top-half pages where only the hole diagram is rendered).
-    """
-    hole_key = str(hole_num)
-    if hole_key not in holes_geo:
-        return None
-
-    ppy = compute_pixels_per_yard_from_geometry(
-        {hole_key: holes_geo[hole_key]}, canvas_h=HOLE_CANVAS_H
-    )
-    effective_scale = {**scale_data, "pixels_per_yard": ppy}
-    projected = project_course(holes_geo, effective_scale, only_hole=hole_key)
-
-    hole_geom = projected.get(hole_key, {})
-    if not hole_geom:
-        return None
-
-    slot_context_features: dict[str, list] = {
-        ft: list(hole_geom.get(ft, []))
-        for ft in ("fairway", "water", "bunkers", "rough_boundary", "paths")
-    }
-
-    hole_geom = smooth_hole_geometry(hole_geom, pixels_per_yard=ppy)
-
-    fitted, _, _, scale = fit_hole(hole_geom, HOLE_CANVAS_W, HOLE_CANVAS_H, left_bias=HOLE_LEFT_BIAS)
-
-    if settings.get("cartographer.yardage_arcs", True):
-        distances = settings.get("cartographer.yardage_arc_distances", [100, 125, 150])
-        gcx, gcy = get_green_centroid(fitted)
-        fitted["_arcs"] = compute_yardage_arcs((gcx, gcy), distances, ppy, scale)
+    ppy: float,
+    scale: float,
+) -> tuple[str, str]:
+    """Compute slot content (green grid with elevation shading) for a hole."""
+    green_rot = get_green_rotation(hole_geom)
+    slot1_svg = ""
+    slot2_svg = ""
 
     show_heightmap = settings.get("cartographer.green_heightmap", True)
     show_contours = settings.get("cartographer.green_contours", True)
     show_arrows = settings.get("cartographer.green_arrows", True)
 
-    hole_svg = render_hole(fitted, settings=settings)
-
-    hole_ps_data = course_ps.get("holes", {}).get(hole_key, {})
-    tee_yardages = {t: int(y) for t, y in hole_ps_data.get("tees", {}).items()}
-    par = int(hole_ps_data.get("par", 4))
-
-    green_rot = get_green_rotation(hole_geom)
-    slot1_svg = ""
-    slot2_svg = ""
-
-    if compute_slots and (slot1_mode == "green_grid" or slot2_mode == "green_grid"):
+    if slot1_mode == "green_grid" or slot2_mode == "green_grid":
         proj_greens = hole_geom.get("green", [])
         if proj_greens:
             proj_ring = proj_greens[0]
@@ -209,7 +168,7 @@ def _get_hole_render_data(
         greens = slot_fitted.get("green", [])
         contour_paths = []
         if dem_path is not None and greens and (show_heightmap or show_contours or show_arrows):
-            orig_greens = holes_geo[hole_key].get("green", [])
+            orig_greens = holes_geo[str(hole_num)].get("green", [])
             if orig_greens:
                 if status_callback and (contour_cache is None or hole_num not in contour_cache):
                     status_callback(f"Computing elevation shading for hole {hole_num}...")
@@ -271,15 +230,83 @@ def _get_hole_render_data(
         slot_fitted = None
         shading_data = None
 
-    if compute_slots and slot1_mode == "green_grid":
+    if slot1_mode == "green_grid":
         slot1_svg = render_green(
             slot_fitted, canvas_w=PRINTABLE_W, canvas_h=SLOT_H,
             fitted=True, shading_data=shading_data,
         )
-    if compute_slots and slot2_mode == "green_grid":
+    if slot2_mode == "green_grid":
         slot2_svg = render_green(
             slot_fitted, canvas_w=PRINTABLE_W, canvas_h=SLOT_H,
             fitted=True, shading_data=shading_data,
+        )
+
+    return slot1_svg, slot2_svg
+
+
+def _get_hole_render_data(
+    hole_num: int,
+    holes_geo: dict,
+    scale_data: dict,
+    settings: dict,
+    course_ps: dict,
+    slot1_mode: str,
+    slot2_mode: str,
+    dem_path: Path | None = None,
+    contour_cache: dict[int, list] | None = None,
+    status_callback: callable = None,
+    compute_slots: bool = True,
+) -> dict | None:
+    """Render a single hole and return raw data for page composition.
+
+    Returns dict with keys: hole_svg, par, tee_yardages, slot1_svg, slot2_svg
+    or None if hole geometry is missing.
+
+    dem_path: optional path to cached DEM GeoTIFF for elevation shading.
+    compute_slots: if False, skip green-grid/shading/contour computation
+                   (used for top-half pages where only the hole diagram is rendered).
+    """
+    hole_key = str(hole_num)
+    if hole_key not in holes_geo:
+        return None
+
+    ppy = compute_pixels_per_yard_from_geometry(
+        {hole_key: holes_geo[hole_key]}, canvas_h=HOLE_CANVAS_H
+    )
+    effective_scale = {**scale_data, "pixels_per_yard": ppy}
+    projected = project_course(holes_geo, effective_scale, only_hole=hole_key)
+
+    hole_geom = projected.get(hole_key, {})
+    if not hole_geom:
+        return None
+
+    slot_context_features: dict[str, list] = {
+        ft: list(hole_geom.get(ft, []))
+        for ft in ("fairway", "water", "bunkers", "rough_boundary", "paths")
+    }
+
+    hole_geom = smooth_hole_geometry(hole_geom, pixels_per_yard=ppy)
+
+    fitted, _, _, scale = fit_hole(hole_geom, HOLE_CANVAS_W, HOLE_CANVAS_H, left_bias=HOLE_LEFT_BIAS)
+
+    if settings.get("cartographer.yardage_arcs", True):
+        distances = settings.get("cartographer.yardage_arc_distances", [100, 125, 150])
+        gcx, gcy = get_green_centroid(fitted)
+        fitted["_arcs"] = compute_yardage_arcs((gcx, gcy), distances, ppy, scale)
+
+    hole_svg = render_hole(fitted, settings=settings)
+
+    hole_ps_data = course_ps.get("holes", {}).get(hole_key, {})
+    tee_yardages = {t: int(y) for t, y in hole_ps_data.get("tees", {}).items()}
+    par = int(hole_ps_data.get("par", 4))
+
+    slot1_svg = ""
+    slot2_svg = ""
+    if compute_slots:
+        slot1_svg, slot2_svg = _compute_slot_content(
+            hole_num, hole_geom, slot_context_features, holes_geo,
+            settings, dem_path, contour_cache, status_callback,
+            slot1_mode, slot2_mode, ppy, scale,
         )
 
     return {
