@@ -20,6 +20,12 @@ def cartographer_app(tmp_path, monkeypatch):
     """Create a Flask app with cartographer plugin discovered and registered."""
     from source import plugin, plugin_loader
 
+    import sys
+    import source.database
+    sys.modules["database"] = source.database
+    import source.store
+    sys.modules["store"] = source.store
+
     import source.main as main_mod
     main_mod.limiter.enabled = False
 
@@ -31,6 +37,9 @@ def cartographer_app(tmp_path, monkeypatch):
     db_path = str(data_dir / "pinsheet.db")
     set_db_path(db_path)
     init_db()
+
+    from source.store import create_user
+    create_user("player", "Player", "pass1234")
 
     import source.store as store_mod
     monkeypatch.setattr(store_mod, "_DATA_DIR", data_dir)
@@ -53,6 +62,10 @@ def cartographer_app(tmp_path, monkeypatch):
     plugin._plugins.clear()
     plugin_loader.discover_plugins(app)
 
+    if "login_page" not in app.view_functions:
+        from source.routes import register_routes
+        register_routes(app, main_mod.limiter, main_mod.csrf, main_mod.User)
+
     yield app
 
     for p in list(plugin._plugins):
@@ -70,6 +83,13 @@ def cartographer_app(tmp_path, monkeypatch):
     static_endpoint = "_plugin_cartographer_static"
     if static_endpoint in app.view_functions:
         del app.view_functions[static_endpoint]
+
+
+@pytest.fixture
+def cartographer_client(cartographer_app):
+    with cartographer_app.test_client() as client:
+        client.post("/login", data={"username": "player", "password": "pass1234"})
+        yield client
 
 
 def _write_test_geo(data_dir: Path, course_name: str, hole_data: dict) -> None:
@@ -142,47 +162,40 @@ class TestCoursePicker:
 
 
 class TestHoleViewer:
-    def test_missing_course_returns_404(self, cartographer_app):
-        with cartographer_app.test_client() as client:
-            resp = client.get("/plugins/cartographer/NoSuchCourse/hole/1")
-            assert resp.status_code == 404
-            assert b"No geometry data" in resp.data
+    def test_missing_course_returns_404(self, cartographer_client):
+        resp = cartographer_client.get("/plugins/cartographer/NoSuchCourse/hole/1")
+        assert resp.status_code == 404
+        assert b"No geometry data" in resp.data
 
-    def test_out_of_range_hole_returns_404(self, cartographer_app):
-        _write_test_geo(cartographer_app.config["DATA_DIR"], "Test GC", {
+    def test_out_of_range_hole_returns_404(self, cartographer_client):
+        _write_test_geo(cartographer_client.application.config["DATA_DIR"], "Test GC", {
             "1": _make_simple_hole(1),
         })
-        with cartographer_app.test_client() as client:
-            resp = client.get("/plugins/cartographer/Test GC/hole/19")
-            assert resp.status_code == 404
-            assert b"Hole 19 not found" in resp.data
+        resp = cartographer_client.get("/plugins/cartographer/Test GC/hole/19")
+        assert resp.status_code == 404
+        assert b"Hole 19 not found" in resp.data
 
-    def test_valid_hole_returns_svg(self, cartographer_app):
-        _write_test_geo(cartographer_app.config["DATA_DIR"], "Test GC", {
+    def test_valid_hole_returns_svg(self, cartographer_client):
+        _write_test_geo(cartographer_client.application.config["DATA_DIR"], "Test GC", {
             "1": _make_simple_hole(1),
         })
-        with cartographer_app.test_client() as client:
-            resp = client.get("/plugins/cartographer/Test GC/hole/1")
-            assert resp.status_code == 200
-            # SVG is in the response (inline SVG, not <img>)
-            assert b"<svg" in resp.data
+        resp = cartographer_client.get("/plugins/cartographer/Test GC/hole/1")
+        assert resp.status_code == 200
+        assert b"<svg" in resp.data
 
 
 class TestCourseGallery:
-    def test_missing_course_returns_404(self, cartographer_app):
-        with cartographer_app.test_client() as client:
-            resp = client.get("/plugins/cartographer/NoSuchCourse/gallery")
-            assert resp.status_code == 404
-            assert b"No geometry data" in resp.data
+    def test_missing_course_returns_404(self, cartographer_client):
+        resp = cartographer_client.get("/plugins/cartographer/NoSuchCourse/gallery")
+        assert resp.status_code == 404
+        assert b"No geometry data" in resp.data
 
-    def test_renders_hole_cards(self, cartographer_app):
+    def test_renders_hole_cards(self, cartographer_client):
         holes = {str(i): _make_simple_hole(i) for i in range(1, 19)}
-        _write_test_geo(cartographer_app.config["DATA_DIR"], "Test GC", holes)
-        with cartographer_app.test_client() as client:
-            resp = client.get("/plugins/cartographer/Test GC/gallery")
-            assert resp.status_code == 200
-            # 18 <a class="carto-hole-card"> elements
-            assert resp.data.count(b"carto-hole-card") >= 18
+        _write_test_geo(cartographer_client.application.config["DATA_DIR"], "Test GC", holes)
+        resp = cartographer_client.get("/plugins/cartographer/Test GC/gallery")
+        assert resp.status_code == 200
+        assert resp.data.count(b"carto-hole-card") >= 18
 
 
 class TestDataDirResolution:
@@ -226,20 +239,17 @@ def _write_test_osm(data_dir, course_name):
 
 
 class TestTaggerRoutes:
-    def test_tagger_page_no_osm_returns_200(self, cartographer_app):
-        """Tagger page renders even without OSM data (shows error message)."""
-        with cartographer_app.test_client() as client:
-            resp = client.get("/plugins/cartographer/NoSuchCourse/tag")
-            assert resp.status_code == 200
-            assert b"No OSM data" in resp.data
+    def test_tagger_page_no_osm_returns_200(self, cartographer_client):
+        resp = cartographer_client.get("/plugins/cartographer/NoSuchCourse/tag")
+        assert resp.status_code == 200
+        assert b"No OSM data" in resp.data
 
-    def test_tagger_page_with_osm_includes_script(self, cartographer_app):
-        data_dir = cartographer_app.config["DATA_DIR"]
+    def test_tagger_page_with_osm_includes_script(self, cartographer_client):
+        data_dir = cartographer_client.application.config["DATA_DIR"]
         _write_test_osm(data_dir, "Test GC")
-        with cartographer_app.test_client() as client:
-            resp = client.get("/plugins/cartographer/Test GC/tag")
-            assert resp.status_code == 200
-            assert b"API_BASE" in resp.data
+        resp = cartographer_client.get("/plugins/cartographer/Test GC/tag")
+        assert resp.status_code == 200
+        assert b"API_BASE" in resp.data
 
     def test_tagger_api_features_no_osm(self, cartographer_app):
         with cartographer_app.test_client() as client:
@@ -348,19 +358,17 @@ class TestOsmUpload:
 
 
 class TestPDFExport:
-    def test_pdf_config_page_renders(self, cartographer_app):
+    def test_pdf_config_page_renders(self, cartographer_client):
         holes = {"1": _make_simple_hole(1)}
-        _write_test_geo(cartographer_app.config["DATA_DIR"], "Test GC", holes)
-        with cartographer_app.test_client() as client:
-            resp = client.get("/plugins/cartographer/Test%20GC/pdf")
-            assert resp.status_code == 200
-            assert b"Generate PDF" in resp.data
+        _write_test_geo(cartographer_client.application.config["DATA_DIR"], "Test GC", holes)
+        resp = cartographer_client.get("/plugins/cartographer/Test%20GC/pdf")
+        assert resp.status_code == 200
+        assert b"Generate PDF" in resp.data
 
-    def test_pdf_config_no_geometry(self, cartographer_app):
-        with cartographer_app.test_client() as client:
-            resp = client.get("/plugins/cartographer/NoSuchCourse/pdf")
-            assert resp.status_code == 200
-            assert b"no geometry" in resp.data.lower() or b"No geometry" in resp.data
+    def test_pdf_config_no_geometry(self, cartographer_client):
+        resp = cartographer_client.get("/plugins/cartographer/NoSuchCourse/pdf")
+        assert resp.status_code == 200
+        assert b"no geometry" in resp.data.lower() or b"No geometry" in resp.data
 
     def test_pdf_generate_no_geo_returns_400(self, cartographer_app):
         with cartographer_app.test_client() as client:
