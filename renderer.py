@@ -15,6 +15,7 @@ from .geometry import (
     project_course, fit_hole, smooth_hole_geometry, chaikin_smooth,
     compute_pixels_per_yard_from_geometry, get_green_centroid,
     find_overview_rotation, opening_ring,
+    rotate_ring, rotate_point, compute_fit,
 )
 
 # Feature render colours — (stroke, fill)
@@ -572,20 +573,10 @@ def render_course_overview(
     if rotation != 0.0:
         cx = sum(x for x, y in all_points) / len(all_points)
         cy = sum(y for x, y in all_points) / len(all_points)
-        rad = math.radians(rotation)
-        cos_a, sin_a = math.cos(rad), math.sin(rad)
-
-        def rotate_point(px: float, py: float) -> tuple[float, float]:
-            dx = px - cx
-            dy = py - cy
-            return dx * cos_a - dy * sin_a + cx, dx * sin_a + dy * cos_a + cy
-
-        def rotate_ring(ring: list) -> list:
-            return [list(rotate_point(x, y)) for x, y in ring]
-
+        origin = (cx, cy)
         for ft in all_features:
-            all_features[ft] = [rotate_ring(r) for r in all_features[ft]]
-        all_tees = [list(rotate_point(x, y)) for x, y in all_tees]
+            all_features[ft] = [rotate_ring(r, rotation, origin) for r in all_features[ft]]
+        all_tees = [list(rotate_point(x, y, rotation, origin)) for x, y in all_tees]
 
     # Morphological opening on fairway rings at overview scale
     if pixels_per_yard > 0:
@@ -616,14 +607,10 @@ def render_course_overview(
         global_min_y = min(global_min_y, y)
         global_max_y = max(global_max_y, y)
 
-    geom_w = global_max_x - global_min_x or 1.0
-    geom_h = global_max_y - global_min_y or 1.0
-    avail_w = canvas_w - 2 * padding
-    avail_h = canvas_h - 2 * padding
-    scale = min(avail_w / geom_w, avail_h / geom_h)
-
-    offset_x = padding + (avail_w - geom_w * scale) / 2 - global_min_x * scale
-    offset_y = padding + (avail_h - geom_h * scale) / 2 - global_min_y * scale
+    scale, offset_x, offset_y = compute_fit(
+        global_min_x, global_min_y, global_max_x, global_max_y,
+        canvas_w, canvas_h, padding,
+    )
 
     def tx(x: float, y: float) -> tuple[float, float]:
         return x * scale + offset_x, y * scale + offset_y

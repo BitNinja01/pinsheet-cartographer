@@ -21,7 +21,7 @@ _FOOT_JS_MARKER = "data-action=upload-osm"
 
 plugin_info = {
     "name": "cartographer",
-    "version": "1.5.0",
+    "version": "1.5.1",
     "description": "Course geometry, hole diagrams, and yardage book generation",
     "author": "PinSheet",
 }
@@ -151,7 +151,13 @@ def _course_actions(course_name: str) -> list[dict]:
         actions.append({"label": "Upload OSM", "url": "#", "attrs": {"data-action": "upload-osm", "data-course": course_name}})
 
     if pdf_status == "fresh":
-        actions.append({"label": "Download PDF", "url": f"/plugins/cartographer/{encoded}/pdf/download"})
+        from .data import get_plugin_data_dir
+        safe = course_name.lower().replace(" ", "_").replace("'", "").replace('"', "")
+        zip_path = get_plugin_data_dir() / "yardage_books" / safe / f"{safe}.zip"
+        if zip_path.exists():
+            actions.append({"label": "Download PDF", "url": f"/plugins/cartographer/{encoded}/pdf/download"})
+        elif has_geometry:
+            actions.append({"label": "Generate PDF", "url": f"/plugins/cartographer/{encoded}/pdf"})
     elif pdf_status == "stale":
         actions.append({"label": "Regen PDF", "url": f"/plugins/cartographer/{encoded}/pdf"})
     elif has_geometry:

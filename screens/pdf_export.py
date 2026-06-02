@@ -186,7 +186,7 @@ class PDFExportScreen(Screen):
         _log.info("pdf_export: generate requested for %s", self.course_name)
 
         # Validate geometry data exists
-        from cartographer.data import load_courses_geo
+        from ..data import load_courses_geo
         courses_geo = load_courses_geo()
         if self.course_name not in courses_geo:
             self.app.push_screen(
@@ -225,7 +225,7 @@ class PDFExportScreen(Screen):
         """Generate PDF in background thread with progress updates."""
         _log.info("pdf_export: generating for %s", self.course_name)
 
-        from cartographer.pdf import generate_book
+        from ..pdf import generate_book
 
         settings = load_settings()
 

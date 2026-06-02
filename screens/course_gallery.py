@@ -75,8 +75,8 @@ class CourseGalleryScreen(Screen):
     @work(thread=True)
     def _render_hole_worker(self, hole_num: int) -> None:
         from textual_image.widget import get_cell_size
-        from cartographer.renderer import render_hole_svg, svg_to_png
-        from cartographer.data import load_courses_geo
+        from ..renderer import render_hole_svg, svg_to_png
+        from ..data import load_courses_geo
 
         courses_geo = load_courses_geo()
         if self._course_name not in courses_geo:

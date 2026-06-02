@@ -25,7 +25,7 @@ from .geometry import (
     compute_pixels_per_yard_from_geometry,
 )
 from .renderer import render_hole, render_green, render_course_overview
-from .elevation import get_course_dem, compute_elevation_shading, compute_contours
+from .elevation import get_course_dem, compute_elevation_shading, compute_slot_contours
 from .layout import (
     compose_sheet, compose_front_page, compose_back_page, compose_chart_page,
     compose_notes_page, render_hole_page, render_bottom_slots,
@@ -72,71 +72,30 @@ def _clip_contour_to_green(
         return []
 
 
-def _get_hole_render_data(
+def _compute_slot_content(
     hole_num: int,
+    hole_geom: dict,
+    slot_context_features: dict,
     holes_geo: dict,
-    scale_data: dict,
     settings: dict,
-    course_ps: dict,
+    dem_path: Path | None,
+    contour_cache: dict[int, list] | None,
+    status_callback: callable,
     slot1_mode: str,
     slot2_mode: str,
-    dem_path: Path | None = None,
-    contour_cache: dict[int, list] | None = None,
-    status_callback: callable = None,
-    compute_slots: bool = True,
-) -> dict | None:
-    """Render a single hole and return raw data for page composition.
-
-    Returns dict with keys: hole_svg, par, tee_yardages, slot1_svg, slot2_svg
-    or None if hole geometry is missing.
-
-    dem_path: optional path to cached DEM GeoTIFF for elevation shading.
-    compute_slots: if False, skip green-grid/shading/contour computation
-                   (used for top-half pages where only the hole diagram is rendered).
-    """
-    hole_key = str(hole_num)
-    if hole_key not in holes_geo:
-        return None
-
-    ppy = compute_pixels_per_yard_from_geometry(
-        {hole_key: holes_geo[hole_key]}, canvas_h=HOLE_CANVAS_H
-    )
-    effective_scale = {**scale_data, "pixels_per_yard": ppy}
-    projected = project_course(holes_geo, effective_scale, only_hole=hole_key)
-
-    hole_geom = projected.get(hole_key, {})
-    if not hole_geom:
-        return None
-
-    slot_context_features: dict[str, list] = {
-        ft: list(hole_geom.get(ft, []))
-        for ft in ("fairway", "water", "bunkers", "rough_boundary", "paths")
-    }
-
-    hole_geom = smooth_hole_geometry(hole_geom, pixels_per_yard=ppy)
-
-    fitted, _, _, scale = fit_hole(hole_geom, HOLE_CANVAS_W, HOLE_CANVAS_H, left_bias=HOLE_LEFT_BIAS)
-
-    if settings.get("cartographer.yardage_arcs", True):
-        distances = settings.get("cartographer.yardage_arc_distances", [100, 125, 150])
-        gcx, gcy = get_green_centroid(fitted)
-        fitted["_arcs"] = compute_yardage_arcs((gcx, gcy), distances, ppy, scale)
+    ppy: float,
+    scale: float,
+) -> tuple[str, str]:
+    """Compute slot content (green grid with elevation shading) for a hole."""
+    green_rot = get_green_rotation(hole_geom)
+    slot1_svg = ""
+    slot2_svg = ""
 
     show_heightmap = settings.get("cartographer.green_heightmap", True)
     show_contours = settings.get("cartographer.green_contours", True)
     show_arrows = settings.get("cartographer.green_arrows", True)
 
-    hole_svg = render_hole(fitted, settings=settings)
-
-    hole_ps_data = course_ps.get("holes", {}).get(hole_key, {})
-    tee_yardages = {t: int(y) for t, y in hole_ps_data.get("tees", {}).items()}
-    par = int(hole_ps_data.get("par", 4))
-
-    green_rot = get_green_rotation(hole_geom)
-    slot1_svg = ""
-    slot2_svg = ""
-
-    if compute_slots and (slot1_mode == "green_grid" or slot2_mode == "green_grid"):
+    if slot1_mode == "green_grid" or slot2_mode == "green_grid":
         proj_greens = hole_geom.get("green", [])
         if proj_greens:
             proj_ring = proj_greens[0]
@@ -209,7 +168,7 @@ def _get_hole_render_data(
         greens = slot_fitted.get("green", [])
         contour_paths = []
         if dem_path is not None and greens and (show_heightmap or show_contours or show_arrows):
-            orig_greens = holes_geo[hole_key].get("green", [])
+            orig_greens = holes_geo[str(hole_num)].get("green", [])
             if orig_greens:
                 if status_callback and (contour_cache is None or hole_num not in contour_cache):
                     status_callback(f"Computing elevation shading for hole {hole_num}...")
@@ -248,38 +207,9 @@ def _get_hole_render_data(
                         else:
                             if status_callback:
                                 status_callback(f"Extracting & connecting contour lines...")
-                            contour_render_scale = 2
-                            img_contour = shading_img.resize(
-                                (max(1, int(svg_bw * contour_render_scale)),
-                                 max(1, int(svg_bh * contour_render_scale))),
-                                Image.LANCZOS,
+                            contour_paths = compute_slot_contours(
+                                shading_img, svg_bx, svg_by, svg_bw, svg_bh,
                             )
-                            z_arr = np.array(img_contour, dtype=float)
-                            contour_levels = [i * 255.0 / 13 for i in range(1, 13)]
-                            raw_contours = compute_contours(z_arr, contour_levels)
-                            contour_paths = []
-                            for level in sorted(raw_contours):
-                                for polyline in raw_contours[level]:
-                                    path = [[svg_bx + float(p[0]) / contour_render_scale,
-                                             svg_by + float(p[1]) / contour_render_scale]
-                                            for p in polyline]
-                                    if len(path) >= 2:
-                                        path_tuples = [(p[0], p[1]) for p in path]
-                                        if len(path_tuples) >= 2 * 33:
-                                            decimated = path_tuples[::33]
-                                            if decimated[-1] != path_tuples[-1]:
-                                                decimated.append(path_tuples[-1])
-                                        else:
-                                            decimated = path_tuples
-                                        smoothed = chaikin_smooth_open(decimated, iterations=3)
-                                        if len(smoothed) >= 2:
-                                            total_len = sum(
-                                                math.hypot(smoothed[i][0] - smoothed[i-1][0],
-                                                           smoothed[i][1] - smoothed[i-1][1])
-                                                for i in range(1, len(smoothed))
-                                            )
-                                            if total_len >= 30.0:
-                                                contour_paths.append([[x, y] for x, y in smoothed])
                             if contour_cache is not None:
                                 contour_cache[hole_num] = contour_paths
                             if status_callback:
@@ -300,15 +230,83 @@ def _get_hole_render_data(
         slot_fitted = None
         shading_data = None
 
-    if compute_slots and slot1_mode == "green_grid":
+    if slot1_mode == "green_grid":
         slot1_svg = render_green(
             slot_fitted, canvas_w=PRINTABLE_W, canvas_h=SLOT_H,
             fitted=True, shading_data=shading_data,
         )
-    if compute_slots and slot2_mode == "green_grid":
+    if slot2_mode == "green_grid":
         slot2_svg = render_green(
             slot_fitted, canvas_w=PRINTABLE_W, canvas_h=SLOT_H,
             fitted=True, shading_data=shading_data,
+        )
+
+    return slot1_svg, slot2_svg
+
+
+def _get_hole_render_data(
+    hole_num: int,
+    holes_geo: dict,
+    scale_data: dict,
+    settings: dict,
+    course_ps: dict,
+    slot1_mode: str,
+    slot2_mode: str,
+    dem_path: Path | None = None,
+    contour_cache: dict[int, list] | None = None,
+    status_callback: callable = None,
+    compute_slots: bool = True,
+) -> dict | None:
+    """Render a single hole and return raw data for page composition.
+
+    Returns dict with keys: hole_svg, par, tee_yardages, slot1_svg, slot2_svg
+    or None if hole geometry is missing.
+
+    dem_path: optional path to cached DEM GeoTIFF for elevation shading.
+    compute_slots: if False, skip green-grid/shading/contour computation
+                   (used for top-half pages where only the hole diagram is rendered).
+    """
+    hole_key = str(hole_num)
+    if hole_key not in holes_geo:
+        return None
+
+    ppy = compute_pixels_per_yard_from_geometry(
+        {hole_key: holes_geo[hole_key]}, canvas_h=HOLE_CANVAS_H
+    )
+    effective_scale = {**scale_data, "pixels_per_yard": ppy}
+    projected = project_course(holes_geo, effective_scale, only_hole=hole_key)
+
+    hole_geom = projected.get(hole_key, {})
+    if not hole_geom:
+        return None
+
+    slot_context_features: dict[str, list] = {
+        ft: list(hole_geom.get(ft, []))
+        for ft in ("fairway", "water", "bunkers", "rough_boundary", "paths")
+    }
+
+    hole_geom = smooth_hole_geometry(hole_geom, pixels_per_yard=ppy)
+
+    fitted, _, _, scale = fit_hole(hole_geom, HOLE_CANVAS_W, HOLE_CANVAS_H, left_bias=HOLE_LEFT_BIAS)
+
+    if settings.get("cartographer.yardage_arcs", True):
+        distances = settings.get("cartographer.yardage_arc_distances", [100, 125, 150])
+        gcx, gcy = get_green_centroid(fitted)
+        fitted["_arcs"] = compute_yardage_arcs((gcx, gcy), distances, ppy, scale)
+
+    hole_svg = render_hole(fitted, settings=settings)
+
+    hole_ps_data = course_ps.get("holes", {}).get(hole_key, {})
+    tee_yardages = {t: int(y) for t, y in hole_ps_data.get("tees", {}).items()}
+    par = int(hole_ps_data.get("par", 4))
+
+    slot1_svg = ""
+    slot2_svg = ""
+    if compute_slots:
+        slot1_svg, slot2_svg = _compute_slot_content(
+            hole_num, hole_geom, slot_context_features, holes_geo,
+            settings, dem_path, contour_cache, status_callback,
+            slot1_mode, slot2_mode, ppy, scale,
         )
 
     return {
@@ -318,6 +316,52 @@ def _get_hole_render_data(
         "slot1_svg": slot1_svg,
         "slot2_svg": slot2_svg,
     }
+
+
+def _compose_standard_sheet(
+    top_hole: int,
+    bottom_hole: int,
+    holes_geo: dict,
+    scale_data: dict,
+    settings: dict,
+    course_ps: dict,
+    slot1_mode: str,
+    slot2_mode: str,
+    dem_path: Path | None,
+    contour_cache: dict,
+    status_callback: callable,
+    stats_data: dict | None,
+) -> str:
+    """Render a standard sheet: top-hole diagram + bottom-hole data slot."""
+    top_hd = _get_hole_render_data(
+        top_hole, holes_geo, scale_data, settings, course_ps,
+        slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
+        status_callback=status_callback, compute_slots=False,
+    )
+    bottom_hd = _get_hole_render_data(
+        bottom_hole, holes_geo, scale_data, settings, course_ps,
+        slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
+        status_callback=status_callback,
+    )
+    if top_hd:
+        top_svg = render_hole_page(
+            hole_svg=top_hd["hole_svg"], hole_num=top_hole, par=top_hd["par"],
+            tee_yardages=top_hd["tee_yardages"],
+        )
+        bottom_svg = render_bottom_slots(
+            slot1_content=slot1_mode, slot2_content=slot2_mode,
+            slot1_svg=bottom_hd["slot1_svg"] if bottom_hd else "",
+            slot2_svg=bottom_hd["slot2_svg"] if bottom_hd else "",
+            stats_data=stats_data,
+            hole_num=bottom_hole if bottom_hd else top_hole,
+        )
+        return compose_sheet(top_svg, bottom_svg)
+    else:
+        import svgwrite as svg
+        dwg = svg.Drawing(size=(f"{PAGE_W}pt", f"{PAGE_CONTENT_H}pt"), viewBox=f"0 0 {PAGE_W} {PAGE_CONTENT_H}")
+        dwg.add(dwg.rect(insert=(0, 0), size=(PAGE_W, PAGE_CONTENT_H), fill="white"))
+        blank = dwg.tostring()
+        return compose_sheet(blank, blank)
 
 
 def generate_book(
@@ -460,35 +504,10 @@ def generate_book(
             top_hole = 9 - page_idx
             bottom_hole = 9 if page_idx == 0 else 18 - top_hole
             fname = f"{safe_course}_{top_hole}_{bottom_hole}.pdf"
-            top_hd = _get_hole_render_data(
-                top_hole, holes_geo, scale_data, settings, course_ps,
-                slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
-                status_callback=status_callback, compute_slots=False,
+            svg_str = _compose_standard_sheet(
+                top_hole, bottom_hole, holes_geo, scale_data, settings, course_ps,
+                slot1_mode, slot2_mode, dem_path, contour_cache, status_callback, stats_data,
             )
-            bottom_hd = _get_hole_render_data(
-                bottom_hole, holes_geo, scale_data, settings, course_ps,
-                slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
-                status_callback=status_callback,
-            )
-            if top_hd:
-                top_svg = render_hole_page(
-                    hole_svg=top_hd["hole_svg"], hole_num=top_hole, par=top_hd["par"],
-                    tee_yardages=top_hd["tee_yardages"],
-                )
-                bottom_svg = render_bottom_slots(
-                    slot1_content=slot1_mode, slot2_content=slot2_mode,
-                    slot1_svg=bottom_hd["slot1_svg"] if bottom_hd else "",
-                    slot2_svg=bottom_hd["slot2_svg"] if bottom_hd else "",
-                    stats_data=stats_data,
-                    hole_num=bottom_hole if bottom_hd else top_hole,
-                )
-                svg_str = compose_sheet(top_svg, bottom_svg)
-            else:
-                import svgwrite as svg
-                dwg = svg.Drawing(size=(f"{PAGE_W}pt", f"{PAGE_CONTENT_H}pt"), viewBox=f"0 0 {PAGE_W} {PAGE_CONTENT_H}")
-                dwg.add(dwg.rect(insert=(0, 0), size=(PAGE_W, PAGE_CONTENT_H), fill="white"))
-                blank = dwg.tostring()
-                svg_str = compose_sheet(blank, blank)
 
         elif page_idx == 9:
             fname = f"{safe_course}_chart_18.pdf"
@@ -516,35 +535,10 @@ def generate_book(
             top_hole = page_idx
             bottom_hole = 18 - top_hole
             fname = f"{safe_course}_{top_hole}_{bottom_hole}.pdf"
-            top_hd = _get_hole_render_data(
-                top_hole, holes_geo, scale_data, settings, course_ps,
-                slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
-                status_callback=status_callback, compute_slots=False,
+            svg_str = _compose_standard_sheet(
+                top_hole, bottom_hole, holes_geo, scale_data, settings, course_ps,
+                slot1_mode, slot2_mode, dem_path, contour_cache, status_callback, stats_data,
             )
-            bottom_hd = _get_hole_render_data(
-                bottom_hole, holes_geo, scale_data, settings, course_ps,
-                slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
-                status_callback=status_callback,
-            )
-            if top_hd:
-                top_svg = render_hole_page(
-                    hole_svg=top_hd["hole_svg"], hole_num=top_hole, par=top_hd["par"],
-                    tee_yardages=top_hd["tee_yardages"],
-                )
-                bottom_svg = render_bottom_slots(
-                    slot1_content=slot1_mode, slot2_content=slot2_mode,
-                    slot1_svg=bottom_hd["slot1_svg"] if bottom_hd else "",
-                    slot2_svg=bottom_hd["slot2_svg"] if bottom_hd else "",
-                    stats_data=stats_data,
-                    hole_num=bottom_hole if bottom_hd else top_hole,
-                )
-                svg_str = compose_sheet(top_svg, bottom_svg)
-            else:
-                import svgwrite as svg
-                dwg = svg.Drawing(size=(f"{PAGE_W}pt", f"{PAGE_CONTENT_H}pt"), viewBox=f"0 0 {PAGE_W} {PAGE_CONTENT_H}")
-                dwg.add(dwg.rect(insert=(0, 0), size=(PAGE_W, PAGE_CONTENT_H), fill="white"))
-                blank = dwg.tostring()
-                svg_str = compose_sheet(blank, blank)
 
         elif page_idx == 18:
             fname = f"{safe_course}_18_notes.pdf"
