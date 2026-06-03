@@ -117,12 +117,23 @@ def get_course_dem(
     course_name: str,
     holes_geo: dict,
     status_callback: callable | None = None,
+    force: bool = False,
 ) -> Path | None:
     """Download/cache the 1m DEM covering all green bounding boxes.
-    Returns path to cached GeoTIFF or None if unavailable."""
+
+    Args:
+        course_name: Course name for cache lookup.
+        holes_geo: Per-hole geometry dict (used for green bounds).
+        status_callback: Optional status updates.
+        force: If True, remove any cached DEM and re-download.
+
+    Returns path to cached GeoTIFF or None if unavailable.
+    """
     from .data import get_dem_path
 
     cache_path = get_dem_path(course_name)
+    if force and cache_path.exists():
+        cache_path.unlink()
     if cache_path.exists():
         return cache_path
 
