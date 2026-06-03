@@ -156,6 +156,7 @@ def _course_actions(course_name: str) -> list[dict]:
         zip_path = get_plugin_data_dir() / "yardage_books" / safe / f"{safe}.zip"
         if zip_path.exists():
             actions.append({"label": "Download PDF", "url": f"/plugins/cartographer/{encoded}/pdf/download"})
+            actions.append({"label": "Regenerate PDF", "url": f"/plugins/cartographer/{encoded}/pdf"})
         elif has_geometry:
             actions.append({"label": "Generate PDF", "url": f"/plugins/cartographer/{encoded}/pdf"})
     elif pdf_status == "stale":
