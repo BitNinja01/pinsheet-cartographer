@@ -18,13 +18,13 @@ from source.database import set_db_path, init_db
 @pytest.fixture
 def cartographer_app(tmp_path, monkeypatch):
     """Create a Flask app with cartographer plugin discovered and registered."""
-    from source import plugin, plugin_loader
-
     import sys
     import source.database
     sys.modules["database"] = source.database
     import source.store
     sys.modules["store"] = source.store
+
+    from source import plugin, plugin_loader
 
     import source.main as main_mod
     main_mod.limiter.enabled = False
@@ -55,6 +55,8 @@ def cartographer_app(tmp_path, monkeypatch):
     app._plugin_blocks = {}
     app._plugin_nav = []
     app._plugin_course_actions = []
+    app._discovered_plugins = []
+    app._plugin_states_at_startup = {}
 
     plugins_dir = Path(__file__).parent.parent.parent  # plugins/
     monkeypatch.setattr(plugin_loader, "_plugins_dir", lambda: plugins_dir)
