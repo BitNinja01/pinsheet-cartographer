@@ -480,14 +480,27 @@ var API_BASE = "/plugins/cartographer/{{ course_encoded }}" + "/tag/api";
         [sw.lng, sw.lat],
       ]]);
 
+      console.log('drag-select: start=', shiftDragStart, 'end=', latlng, 'poly=', dragPolygon);
+      console.log('drag-select: layers count=', Object.keys(layers).length);
+
+      var featureIdx = 0;
       Object.entries(layers).forEach(([id, layer]) => {
         if (!layer.feature) return;
+        featureIdx++;
         const ftype = layer.feature.properties.type;
         if (ftype === 'water' || ftype === 'waterway' || ftype === 'path') return;
-        if (turf.booleanIntersects(layer.feature, dragPolygon)) {
+        var intersects = false;
+        try {
+          intersects = turf.booleanIntersects(layer.feature, dragPolygon);
+        } catch (err) {
+          console.warn('drag-select: booleanIntersects threw for', id, err);
+        }
+        if (intersects) {
           affected.push({id, layer});
+          console.log('drag-select: matched', id, ftype);
         }
       });
+      console.log('drag-select: features checked=', featureIdx, 'matched=', affected.length);
 
       const undoIds = [];
 
@@ -506,9 +519,12 @@ var API_BASE = "/plugins/cartographer/{{ course_encoded }}" + "/tag/api";
 
       if (undoIds.length > 0) {
         undoStack.push({type: 'multi', mode: assignmentMode, ids: undoIds, hole: currentHole});
+        console.log('drag-select: pushed undo for', undoIds.length, 'ids');
+      } else {
+        console.log('drag-select: no undo ids (0 affected or all already assigned)');
       }
     } catch (err) {
-      console.error('shiftDragEnd error:', err);
+      console.error('drag-select error:', err);
     } finally {
       cancelShiftDrag();
     }
