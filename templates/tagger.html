@@ -431,9 +431,10 @@ var API_BASE = "/plugins/cartographer/{{ course_encoded }}" + "/tag/api";
     if (splitModeActive || reviewMode) return;
     e.stopImmediatePropagation();
 
+    console.log('drag-select: mousedown (capture)');
+    if (shiftDragRect) { map.removeLayer(shiftDragRect); }
     shiftDragActive = true;
     shiftDragStart = map.mouseEventToLatLng(e);
-    if (shiftDragRect) { map.removeLayer(shiftDragRect); }
     shiftDragRect = L.rectangle([shiftDragStart, shiftDragStart], {
       color: 'oklch(48% 0.16 240)',
       weight: 2,
@@ -462,51 +463,55 @@ var API_BASE = "/plugins/cartographer/{{ course_encoded }}" + "/tag/api";
   function onShiftDragEnd(e) {
     document.removeEventListener('mousemove', onShiftDragMove);
     document.removeEventListener('mouseup', onShiftDragEnd);
-    if (!shiftDragActive) return;
+    if (!shiftDragActive) { console.log('shiftDragEnd: already inactive'); return; }
     shiftDragActive = false;
-    if (!shiftDragRect || !shiftDragStart) return;
+    if (!shiftDragRect || !shiftDragStart) { console.log('shiftDragEnd: no rect or start'); return; }
 
-    const latlng = map.mouseEventToLatLng(e);
-    const dragBounds = L.latLngBounds(shiftDragStart, latlng);
-    const affected = [];
+    try {
+      const latlng = map.mouseEventToLatLng(e);
+      const dragBounds = L.latLngBounds(shiftDragStart, latlng);
+      const affected = [];
 
-    const sw = dragBounds.getSouthWest();
-    const ne = dragBounds.getNorthEast();
-    const dragPolygon = turf.polygon([[
-      [sw.lng, sw.lat], [ne.lng, sw.lat],
-      [ne.lng, ne.lat], [sw.lng, ne.lat],
-      [sw.lng, sw.lat],
-    ]]);
+      const sw = dragBounds.getSouthWest();
+      const ne = dragBounds.getNorthEast();
+      const dragPolygon = turf.polygon([[
+        [sw.lng, sw.lat], [ne.lng, sw.lat],
+        [ne.lng, ne.lat], [sw.lng, ne.lat],
+        [sw.lng, sw.lat],
+      ]]);
 
-    Object.entries(layers).forEach(([id, layer]) => {
-      if (!layer.feature) return;
-      const ftype = layer.feature.properties.type;
-      if (ftype === 'water' || ftype === 'waterway' || ftype === 'path') return;
-      if (turf.booleanIntersects(layer.feature, dragPolygon)) {
-        affected.push({id, layer});
+      Object.entries(layers).forEach(([id, layer]) => {
+        if (!layer.feature) return;
+        const ftype = layer.feature.properties.type;
+        if (ftype === 'water' || ftype === 'waterway' || ftype === 'path') return;
+        if (turf.booleanIntersects(layer.feature, dragPolygon)) {
+          affected.push({id, layer});
+        }
+      });
+
+      const undoIds = [];
+
+      affected.forEach(({id}) => {
+        if (assignmentMode === 'add') {
+          if (featureAssignments.get(id)?.has(currentHole)) return;
+          _ensureSet(id).add(currentHole);
+          undoIds.push(id);
+        } else {
+          if (!featureAssignments.has(id) || !featureAssignments.get(id).has(currentHole)) return;
+          featureAssignments.get(id).delete(currentHole);
+          if (featureAssignments.get(id).size === 0) featureAssignments.delete(id);
+          undoIds.push(id);
+        }
+      });
+
+      if (undoIds.length > 0) {
+        undoStack.push({type: 'multi', mode: assignmentMode, ids: undoIds, hole: currentHole});
       }
-    });
-
-    const undoIds = [];
-
-    affected.forEach(({id}) => {
-      if (assignmentMode === 'add') {
-        if (featureAssignments.get(id)?.has(currentHole)) return;
-        _ensureSet(id).add(currentHole);
-        undoIds.push(id);
-      } else {
-        if (!featureAssignments.has(id) || !featureAssignments.get(id).has(currentHole)) return;
-        featureAssignments.get(id).delete(currentHole);
-        if (featureAssignments.get(id).size === 0) featureAssignments.delete(id);
-        undoIds.push(id);
-      }
-    });
-
-    if (undoIds.length > 0) {
-      undoStack.push({type: 'multi', mode: assignmentMode, ids: undoIds, hole: currentHole});
+    } catch (err) {
+      console.error('shiftDragEnd error:', err);
+    } finally {
+      cancelShiftDrag();
     }
-
-    cancelShiftDrag();
     renderFeatureList(allFeatures);
     refreshUndoButton();
     refreshFeatureStyles();
