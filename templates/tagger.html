@@ -424,16 +424,17 @@ var API_BASE = "/plugins/cartographer/{{ course_encoded }}" + "/tag/api";
     }
   });
 
-  map.on('mousedown', e => {
-    if (!e.originalEvent.ctrlKey) return;
+  const mapContainer = map.getContainer();
+
+  mapContainer.addEventListener('mousedown', function(e) {
+    if (!e.ctrlKey) return;
     if (splitModeActive || reviewMode) return;
-    L.DomEvent.stopPropagation(e);
-    L.DomEvent.preventDefault(e);
-    map.dragging.disable();
+    e.stopImmediatePropagation();
+
     shiftDragActive = true;
-    shiftDragStart = e.latlng;
+    shiftDragStart = map.mouseEventToLatLng(e);
     if (shiftDragRect) { map.removeLayer(shiftDragRect); }
-    shiftDragRect = L.rectangle([e.latlng, e.latlng], {
+    shiftDragRect = L.rectangle([shiftDragStart, shiftDragStart], {
       color: 'oklch(48% 0.16 240)',
       weight: 2,
       dashArray: '6 3',
@@ -441,25 +442,32 @@ var API_BASE = "/plugins/cartographer/{{ course_encoded }}" + "/tag/api";
       fillOpacity: 0.1,
       interactive: false,
     }).addTo(map);
-  });
 
-  map.on('mousemove', e => {
+    document.addEventListener('mousemove', onShiftDragMove);
+    document.addEventListener('mouseup', onShiftDragEnd);
+  }, true);
+
+  function onShiftDragMove(e) {
     if (!shiftDragActive) return;
-    if (!e.originalEvent.ctrlKey) {
+    const latlng = map.mouseEventToLatLng(e);
+    if (!e.ctrlKey) {
       cancelShiftDrag();
       return;
     }
     if (shiftDragRect && shiftDragStart) {
-      shiftDragRect.setBounds(L.latLngBounds(shiftDragStart, e.latlng));
+      shiftDragRect.setBounds(L.latLngBounds(shiftDragStart, latlng));
     }
-  });
+  }
 
-  map.on('mouseup', e => {
+  function onShiftDragEnd(e) {
+    document.removeEventListener('mousemove', onShiftDragMove);
+    document.removeEventListener('mouseup', onShiftDragEnd);
     if (!shiftDragActive) return;
     shiftDragActive = false;
     if (!shiftDragRect || !shiftDragStart) return;
 
-    const dragBounds = L.latLngBounds(shiftDragStart, e.latlng);
+    const latlng = map.mouseEventToLatLng(e);
+    const dragBounds = L.latLngBounds(shiftDragStart, latlng);
     const affected = [];
 
     const sw = dragBounds.getSouthWest();
@@ -502,16 +510,17 @@ var API_BASE = "/plugins/cartographer/{{ course_encoded }}" + "/tag/api";
     renderFeatureList(allFeatures);
     refreshUndoButton();
     refreshFeatureStyles();
-  });
+  }
 
   function cancelShiftDrag() {
+    document.removeEventListener('mousemove', onShiftDragMove);
+    document.removeEventListener('mouseup', onShiftDragEnd);
     shiftDragActive = false;
     shiftDragStart = null;
     if (shiftDragRect) {
       map.removeLayer(shiftDragRect);
       shiftDragRect = null;
     }
-    map.dragging.enable();
   }
 
   document.getElementById('btn-undo').onclick = () => {
