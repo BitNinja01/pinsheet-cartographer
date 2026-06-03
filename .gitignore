@@ -3,6 +3,7 @@
 .opencode/
 .superpowers/
 .od-skills/
+map.osm
 
 # Internal documentation (session memory framework, design docs, internal brainstorming)
 docs/HANDOFF.md

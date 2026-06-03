@@ -161,7 +161,11 @@ def _course_green_bounds(holes_geo: dict) -> tuple[float, float, float, float] |
 
 
 def _search_tnm(bounds: tuple[float, float, float, float]) -> str | None:
-    """Query USGS TNM API for 1m DEM download URL covering the bounds."""
+    """Query USGS TNM API for 1m DEM download URL covering the bounds.
+
+    Prefers standard topographic DEMs over topobathy (TopoBathy) products,
+    since topobathy tiles often have extensive NODATA areas on raised terrain.
+    """
     min_lon, min_lat, max_lon, max_lat = bounds
     params = {
         "bbox": f"{min_lon},{min_lat},{max_lon},{max_lat}",
@@ -176,13 +180,25 @@ def _search_tnm(bounds: tuple[float, float, float, float]) -> str | None:
             params=params, timeout=30,
         )
         resp.raise_for_status()
+
+        preferred: list[str] = []
+        fallback: list[str] = []
         for item in resp.json().get("items", []):
             if "1 Meter" not in item.get("title", ""):
                 continue
             for key in ("downloadURL", "url", "URL"):
                 url = item.get(key)
                 if url and url.lower().endswith(".tif"):
-                    return url
+                    if "TopoBathy" in item.get("title", ""):
+                        fallback.append(url)
+                    else:
+                        preferred.append(url)
+                    break
+
+        if preferred:
+            return preferred[0]
+        if fallback:
+            return fallback[0]
         return None
     except requests.RequestException:
         return None
