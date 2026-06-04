@@ -179,7 +179,7 @@ class TestLoadCoursesGeoNormalized:
         (tmp_path / "courses_geo.json").write_text(json.dumps(data))
         result = load_courses_geo()
         green = result["Course"]["holes"]["7"]["green"]
-        assert green == [[[[0, 0], [10, 0], [10, 10]]], [[[5, 5], [15, 5], [15, 15]]]]
+        assert green == [[[0, 0], [10, 0], [10, 10]], [[5, 5], [15, 5], [15, 15]]]
 
     def test_load_courses_geo_preserves_tee_boxes(self, monkeypatch, tmp_path):
         monkeypatch.setattr("cartographer.data._get_plugin_data_dir", lambda: tmp_path)
