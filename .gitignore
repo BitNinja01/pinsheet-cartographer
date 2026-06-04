@@ -7,6 +7,7 @@ map.osm
 willows_run_eagles_talon.*
 fixup_tee_data.sh
 dump_course_data.sh
+diag_hole17.sh
 
 # Internal documentation (session memory framework, design docs, internal brainstorming)
 docs/HANDOFF.md
