@@ -32,10 +32,11 @@ SLOT_H = 243.0       # half of bottom half
 # Hole number circle (adjustable)
 HOLE_NUMBER_CIRCLE_RADIUS = 16.0  # Experiment with this value
 
-TEE_DISPLAY_ORDER = ["red", "gold", "white", "blue", "black", "green"]
+TEE_DISPLAY_ORDER = ["red", "gold", "yellow", "white", "blue", "combo", "black", "green"]
 TEE_COLOUR_MAP = {
     "blue": "#1565C0", "white": "#555", "red": "#C62828",
-    "gold": "#F9A825", "black": "#212121", "green": "#2E7D32",
+    "gold": "#F9A825", "yellow": "#FDD835", "black": "#212121",
+    "combo": "#7B1FA2", "green": "#2E7D32",
 }
 
 _CORNER_ARM = 8.0  # length of each chevron arm in points
