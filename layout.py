@@ -262,9 +262,10 @@ def render_hole_page(
         text_anchor="middle",
     ))
 
+    known = {n: i for i, n in enumerate(TEE_DISPLAY_ORDER)}
     sorted_tees = sorted(
-        [(name, tee_yardages[name]) for name in TEE_DISPLAY_ORDER if name in tee_yardages],
-        key=lambda x: x[1]
+        tee_yardages.items(),
+        key=lambda x: (known.get(x[0], 999), x[1])
     )
 
     if sorted_tees:
@@ -499,9 +500,10 @@ def compose_front_page(
 
     sorted_tees: list[tuple[str, int]] = []
     if tee_totals:
+        known = {n: i for i, n in enumerate(TEE_DISPLAY_ORDER)}
         sorted_tees = sorted(
-            [(n, tee_totals[n]) for n in TEE_DISPLAY_ORDER if n in tee_totals],
-            key=lambda x: x[1],
+            tee_totals.items(),
+            key=lambda x: (known.get(x[0], 999), x[1]),
         )
 
     # Bounding-box heights (ascender above first baseline + descender below last baseline)
