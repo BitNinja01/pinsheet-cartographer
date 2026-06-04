@@ -281,7 +281,7 @@ def render_hole_page(
         content_h = _text_ascender(fs) + (n - 1) * line_h + _text_descender(fs)
 
         # Rect: bbox + padding, bottom-right corner at printable bottom-right
-        yd_rect_w = content_w + 2 * pad
+        yd_rect_w = content_w + 2 * pad + 8
         yd_rect_h = content_h + 2 * pad
         yd_rect_x = PAGE_W - MARGIN - yd_rect_w
         yd_rect_y = PAGE_CONTENT_H - yd_rect_h
