@@ -32,10 +32,11 @@ SLOT_H = 243.0       # half of bottom half
 # Hole number circle (adjustable)
 HOLE_NUMBER_CIRCLE_RADIUS = 16.0  # Experiment with this value
 
-TEE_DISPLAY_ORDER = ["red", "gold", "white", "blue", "black", "green"]
+TEE_DISPLAY_ORDER = ["red", "gold", "yellow", "white", "blue", "combo", "black", "green"]
 TEE_COLOUR_MAP = {
     "blue": "#1565C0", "white": "#555", "red": "#C62828",
-    "gold": "#F9A825", "black": "#212121", "green": "#2E7D32",
+    "gold": "#F9A825", "yellow": "#FDD835", "black": "#212121",
+    "combo": "#7B1FA2", "green": "#2E7D32",
 }
 
 _CORNER_ARM = 8.0  # length of each chevron arm in points
@@ -261,9 +262,10 @@ def render_hole_page(
         text_anchor="middle",
     ))
 
+    known = {n: i for i, n in enumerate(TEE_DISPLAY_ORDER)}
     sorted_tees = sorted(
-        [(name, tee_yardages[name]) for name in TEE_DISPLAY_ORDER if name in tee_yardages],
-        key=lambda x: x[1]
+        tee_yardages.items(),
+        key=lambda x: (known.get(x[0], 999), x[1])
     )
 
     if sorted_tees:
@@ -498,9 +500,10 @@ def compose_front_page(
 
     sorted_tees: list[tuple[str, int]] = []
     if tee_totals:
+        known = {n: i for i, n in enumerate(TEE_DISPLAY_ORDER)}
         sorted_tees = sorted(
-            [(n, tee_totals[n]) for n in TEE_DISPLAY_ORDER if n in tee_totals],
-            key=lambda x: x[1],
+            tee_totals.items(),
+            key=lambda x: (known.get(x[0], 999), x[1]),
         )
 
     # Bounding-box heights (ascender above first baseline + descender below last baseline)
