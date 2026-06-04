@@ -4,6 +4,7 @@
 .superpowers/
 .od-skills/
 map.osm
+willows_run_eagles_talon.*
 
 # Internal documentation (session memory framework, design docs, internal brainstorming)
 docs/HANDOFF.md
