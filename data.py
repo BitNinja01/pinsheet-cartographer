@@ -76,7 +76,14 @@ def _normalize_hole_features(hole_data: dict) -> dict:
             if not items:
                 normalized[key] = []
             elif isinstance(items[0], dict) and "rings" in items[0]:
-                normalized[key] = [ring for item in items for ring in item["rings"]]
+                rings_out = []
+                for item in items:
+                    r = item["rings"]
+                    if r and isinstance(r[0], list) and r[0] and isinstance(r[0][0], list):
+                        rings_out.extend(r)
+                    else:
+                        rings_out.append(r)
+                normalized[key] = rings_out
             else:
                 normalized[key] = items
         else:
