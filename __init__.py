@@ -219,7 +219,7 @@ def register(app):
         _csrf = app.extensions.get("csrf")
         if _csrf is not None:
             for _rule in app.url_map.iter_rules():
-                if _rule.endpoint and _rule.endpoint.startswith("cartographer.") and "POST" in _rule.methods:
+                if _rule.endpoint and _rule.endpoint.startswith("cartographer.") and (_rule.methods & {"POST", "DELETE"}):
                     _csrf.exempt(app.view_functions[_rule.endpoint])
     except Exception as _exc:
         log.warning("cartographer: blueprint registration failed — %s", _exc)
