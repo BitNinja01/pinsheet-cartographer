@@ -238,14 +238,35 @@ def course_actions_html(course):
         acts = _ca(course)
     except Exception:
         acts = []
-    parts = []
+    if not acts:
+        return "", 200, {"Content-Type": "text/html"}
+    parts = ['<span class="cartographer-actions">']
     for a in acts:
         url = a.get("url", "#")
         label = a.get("label", "")
         attrs = "".join(f' {k}="{v}"' for k, v in a.get("attrs", {}).items())
-        parts.append(f'<a href="{url}" class="btn" style="margin-left:0.5rem"{attrs}>{label}</a>')
-    html = "".join(parts)
-    return html, 200, {"Content-Type": "text/html"}
+        parts.append(f'<a href="{url}" class="btn"{attrs}>{label}</a>')
+    parts.append('</span>')
+    return "".join(parts), 200, {"Content-Type": "text/html"}
+
+
+@bp.route("/<string:course>/osm", methods=["DELETE"])
+def delete_osm(course):
+    from .data import get_osm_path, get_dem_path, get_contours_cache_path
+
+    osm_path = get_osm_path(course)
+    if osm_path.exists():
+        osm_path.unlink()
+
+    dem_path = get_dem_path(course)
+    if dem_path.exists():
+        dem_path.unlink()
+
+    contours_path = get_contours_cache_path(course)
+    if contours_path.exists():
+        contours_path.unlink()
+
+    return jsonify({"status": "ok"})
 
 
 @bp.route("/<string:course>/upload-osm", methods=["POST"])

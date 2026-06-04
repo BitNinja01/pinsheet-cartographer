@@ -144,6 +144,7 @@ def _course_actions(course_name: str) -> list[dict]:
     if has_osm:
         actions.append({"label": "View", "url": f"/plugins/cartographer/{encoded}/gallery"})
         actions.append({"label": "Tag", "url": f"/plugins/cartographer/{encoded}/tag"})
+        actions.append({"label": "Delete OSM", "url": "#", "attrs": {"data-action": "delete-osm", "data-course": course_name}})
     elif has_geometry:
         actions.append({"label": "View", "url": f"/plugins/cartographer/{encoded}/gallery"})
         actions.append({"label": "Upload OSM", "url": "#", "attrs": {"data-action": "upload-osm", "data-course": course_name}})
@@ -259,6 +260,16 @@ def register(app):
         '.catch(function(){btn.textContent="Network error";setTimeout(function(){btn.textContent="Upload OSM"},3000)});'
         '});'
         'document.body.appendChild(inp);inp.click();document.body.removeChild(inp);'
+        '});'
+        'document.addEventListener("click",function(e){'
+        'var t=e.target.closest("[data-action=delete-osm]");'
+        'if(!t)return;'
+        'e.preventDefault();'
+        'if(!confirm("Delete cached OSM and elevation data for this course?"))return;'
+        'var btn=t;var orig=btn.textContent;btn.textContent="Deleting...";'
+        'fetch("/plugins/cartographer/"+encodeURIComponent(t.getAttribute("data-course"))+"/osm",{method:"DELETE"})'
+        '.then(function(r){if(r.ok){location.reload()}else{return r.json().then(function(d){alert(d.message||"Delete failed");btn.textContent=orig})}})'
+        '.catch(function(){alert("Network error");btn.textContent=orig});'
         '});'
         '</script>'
     )

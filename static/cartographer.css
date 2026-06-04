@@ -1,5 +1,11 @@
 /* Cartographer plugin styles — uses only PinSheet design tokens */
 
+.cartographer-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 0.5rem;
+}
+
 .carto-hole-nav {
     display: flex;
     justify-content: space-between;
