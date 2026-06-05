@@ -174,7 +174,7 @@ def test_elevation_shading_normal():
 
 
 def test_elevation_shading_flat():
-    """Flat elevation returns a uniform gray image instead of None."""
+    """Flat elevation (<0.25m range) returns None."""
     from unittest.mock import patch, MagicMock
     from pathlib import Path
     import numpy as np
@@ -203,9 +203,7 @@ def test_elevation_shading_flat():
         mock_mask.return_value = np.ones_like(z, dtype=bool)
 
         result = compute_elevation_shading(green_ring, Path("/fake.tif"))
-        assert result is not None
-        pixels = list(result.getdata())
-        assert all(p == 128 for p in pixels)
+        assert result is None
 
 
 def test_elevation_shading_upscaled_dimensions():
