@@ -137,12 +137,6 @@ def get_course_dem(
     cache_path = get_dem_path(course_name)
     log.info("get_course_dem: course=%s cache=%s exists=%s force=%s",
              course_name, cache_path.name, cache_path.exists(), force)
-    if force and cache_path.exists():
-        log.info("get_course_dem: deleting cached DEM")
-        cache_path.unlink()
-    if cache_path.exists():
-        log.info("get_course_dem: using cached DEM")
-        return cache_path
 
     bounds = _course_green_bounds(holes_geo)
     if bounds is None:
@@ -152,10 +146,16 @@ def get_course_dem(
 
     url = _search_tnm(bounds)
     if url is None:
-        log.warning("get_course_dem: no DEM URL found from TNM")
+        log.warning("get_course_dem: no DEM URL from TNM, keeping cached DEM if any")
+        if cache_path.exists():
+            return cache_path
         return None
-    log.info("get_course_dem: found DEM URL")
 
+    if force and cache_path.exists():
+        log.info("get_course_dem: deleting cached DEM for fresh download")
+        cache_path.unlink()
+
+    log.info("get_course_dem: found DEM URL, downloading...")
     if status_callback:
         status_callback("Downloading elevation data...")
     _download_file(url, cache_path, status_callback=status_callback)
@@ -205,7 +205,12 @@ def _search_tnm(bounds: tuple[float, float, float, float]) -> str | None:
         )
         resp.raise_for_status()
 
-        items = resp.json().get("items", [])
+        data = resp.json()
+        if "error" in data:
+            log.warning("_search_tnm: API error: %s", data["error"])
+            return None
+
+        items = data.get("items", [])
         log.info("_search_tnm: bbox=%s got %d items", params["bbox"], len(items))
 
         preferred: list[str] = []
