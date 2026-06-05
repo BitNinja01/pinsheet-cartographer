@@ -135,23 +135,33 @@ def get_course_dem(
     from .data import get_dem_path
 
     cache_path = get_dem_path(course_name)
+    log.info("get_course_dem: course=%s cache=%s exists=%s force=%s",
+             course_name, cache_path.name, cache_path.exists(), force)
     if force and cache_path.exists():
+        log.info("get_course_dem: deleting cached DEM")
         cache_path.unlink()
     if cache_path.exists():
+        log.info("get_course_dem: using cached DEM")
         return cache_path
 
     bounds = _course_green_bounds(holes_geo)
     if bounds is None:
+        log.warning("get_course_dem: no green bounds found")
         return None
+    log.info("get_course_dem: green bounds=%s", bounds)
 
     url = _search_tnm(bounds)
     if url is None:
+        log.warning("get_course_dem: no DEM URL found from TNM")
         return None
+    log.info("get_course_dem: found DEM URL")
 
     if status_callback:
         status_callback("Downloading elevation data...")
     _download_file(url, cache_path, status_callback=status_callback)
-    return cache_path if cache_path.exists() else None
+    exists = cache_path.exists()
+    log.info("get_course_dem: download complete, exists=%s", exists)
+    return cache_path if exists else None
 
 
 def _course_green_bounds(holes_geo: dict) -> tuple[float, float, float, float] | None:
