@@ -65,19 +65,21 @@ def test_multiple_levels():
 
 
 def test_dem_cached():
-    """When DEM is cached, no network request is made."""
-    from unittest.mock import MagicMock, patch
+    """Cached DEM returned when API is unreachable."""
+    from unittest.mock import patch, MagicMock
     from pathlib import Path
     from cartographer.elevation import get_course_dem
+    import cartographer.elevation as elevation_mod
 
     holes = {"1": {"green": [[[-122.3, 47.6], [-122.3, 47.61], [-122.29, 47.61], [-122.29, 47.6]]]}}
     with patch("cartographer.data.get_dem_path") as mock_path:
         mock_path.return_value = MagicMock(spec=Path)
         mock_path.return_value.exists.return_value = True
-        with patch("cartographer.elevation.requests.get") as mock_get:
-            result = get_course_dem("test", holes)
-            assert result is not None
-            mock_get.assert_not_called()
+        with patch.object(elevation_mod, "_search_tnm", return_value=None):
+            with patch("cartographer.elevation.requests.get") as mock_get:
+                result = get_course_dem("test", holes)
+                assert result is not None
+                mock_get.assert_not_called()
 
 
 def test_dem_no_greens():
