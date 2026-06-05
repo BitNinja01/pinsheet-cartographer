@@ -189,9 +189,6 @@ def _search_tnm(bounds: tuple[float, float, float, float]) -> str | None:
 
     Prefers standard topographic DEMs over topobathy (TopoBathy) products,
     since topobathy tiles often have extensive NODATA areas on raised terrain.
-
-    Falls back to constructing the 1/3 arc-second tile URL directly from
-    lat/lon when the API is unavailable.
     """
     min_lon, min_lat, max_lon, max_lat = bounds
     params = {
@@ -240,24 +237,7 @@ def _search_tnm(bounds: tuple[float, float, float, float]) -> str | None:
     except requests.RequestException as e:
         log.warning("_search_tnm: API request failed: %s", e)
 
-    # Fallback: construct 1/3 arc-second tile URL directly from lat/lon
-    center_lat = (min_lat + max_lat) / 2
-    center_lon = (min_lon + max_lon) / 2
-    log.info("_search_tnm: trying 1/3 arc-second fallback for (%.4f, %.4f)", center_lat, center_lon)
-
-    import math
-    ns = "n" if center_lat >= 0 else "s"
-    ew = "e" if center_lon >= 0 else "w"
-    lat_tile = int(math.ceil(abs(center_lat)))
-    lon_tile = int(math.ceil(abs(center_lon)))
-    tile_name = f"{ns}{lat_tile}{ew}{lon_tile}"
-
-    url = (
-        "https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/13/TIFF/historical/"
-        f"{tile_name}/USGS_13_{tile_name}_20240327.tif"
-    )
-    log.info("_search_tnm: 1/3 arc-second fallback URL: %s", url)
-    return url
+    return None
 
 
 def _download_file(
