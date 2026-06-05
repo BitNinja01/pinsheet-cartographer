@@ -405,9 +405,6 @@ def compute_elevation_shading(
     else:
         return None
 
-    if z_max - z_min < 0.10:
-        return None
-
     z, _ = _upsample_dem(z, win_transform, factor=4)
     if green_mask is not None:
         green_mask_big = _upsample_mask(green_mask, factor=4)
@@ -419,7 +416,11 @@ def compute_elevation_shading(
         z_green_big = z[green_mask_big]
         z_min, z_max = np.nanmin(z_green_big), np.nanmax(z_green_big)
 
-    z_norm = np.clip((z - z_min) / (z_max - z_min), 0.0, 1.0)
+    z_range = z_max - z_min
+    if z_range < 1e-9:
+        return Image.fromarray(np.full(z.shape, 128, dtype=np.uint8), mode="L")
+
+    z_norm = np.clip((z - z_min) / z_range, 0.0, 1.0)
     z_uint8 = (z_norm * 255).astype(np.uint8)
 
     return Image.fromarray(z_uint8, mode="L")
