@@ -189,6 +189,9 @@ def _search_tnm(bounds: tuple[float, float, float, float]) -> str | None:
 
     Prefers standard topographic DEMs over topobathy (TopoBathy) products,
     since topobathy tiles often have extensive NODATA areas on raised terrain.
+
+    Falls back to constructing the 1/3 arc-second tile URL directly from
+    lat/lon when the API is unavailable.
     """
     min_lon, min_lat, max_lon, max_lat = bounds
     params = {
@@ -207,38 +210,54 @@ def _search_tnm(bounds: tuple[float, float, float, float]) -> str | None:
 
         data = resp.json()
         if "error" in data:
-            log.warning("_search_tnm: API error: %s", data["error"])
-            return None
+            log.warning("_search_tnm: API error response: %s", data["error"])
+        else:
+            items = data.get("items", [])
+            log.info("_search_tnm: bbox=%s got %d items", params["bbox"], len(items))
 
-        items = data.get("items", [])
-        log.info("_search_tnm: bbox=%s got %d items", params["bbox"], len(items))
+            preferred: list[str] = []
+            fallback: list[str] = []
+            for item in items:
+                if "1 Meter" not in item.get("title", ""):
+                    continue
+                for key in ("downloadURL", "url", "URL"):
+                    url = item.get(key)
+                    if url and url.lower().endswith(".tif"):
+                        if "TopoBathy" in item.get("title", ""):
+                            fallback.append(url)
+                        else:
+                            preferred.append(url)
+                        break
 
-        preferred: list[str] = []
-        fallback: list[str] = []
-        for item in items:
-            if "1 Meter" not in item.get("title", ""):
-                continue
-            for key in ("downloadURL", "url", "URL"):
-                url = item.get(key)
-                if url and url.lower().endswith(".tif"):
-                    if "TopoBathy" in item.get("title", ""):
-                        fallback.append(url)
-                    else:
-                        preferred.append(url)
-                    break
-
-        log.info("_search_tnm: %d preferred, %d fallback", len(preferred), len(fallback))
-        if preferred:
-            log.info("_search_tnm: using preferred URL: %s", preferred[0])
-            return preferred[0]
-        if fallback:
-            log.info("_search_tnm: using fallback URL: %s", fallback[0])
-            return fallback[0]
-        log.warning("_search_tnm: no suitable DEM found")
-        return None
+            log.info("_search_tnm: %d preferred, %d fallback", len(preferred), len(fallback))
+            if preferred:
+                log.info("_search_tnm: using preferred URL: %s", preferred[0])
+                return preferred[0]
+            if fallback:
+                log.info("_search_tnm: using fallback URL: %s", fallback[0])
+                return fallback[0]
+            log.warning("_search_tnm: no suitable DEM found via API")
     except requests.RequestException as e:
-        log.warning("_search_tnm: request failed: %s", e)
-        return None
+        log.warning("_search_tnm: API request failed: %s", e)
+
+    # Fallback: construct 1/3 arc-second tile URL directly from lat/lon
+    center_lat = (min_lat + max_lat) / 2
+    center_lon = (min_lon + max_lon) / 2
+    log.info("_search_tnm: trying 1/3 arc-second fallback for (%.4f, %.4f)", center_lat, center_lon)
+
+    import math
+    ns = "n" if center_lat >= 0 else "s"
+    ew = "e" if center_lon >= 0 else "w"
+    lat_tile = int(math.ceil(abs(center_lat)))
+    lon_tile = int(math.ceil(abs(center_lon)))
+    tile_name = f"{ns}{lat_tile}{ew}{lon_tile}"
+
+    url = (
+        "https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/13/TIFF/historical/"
+        f"{tile_name}/USGS_13_{tile_name}_20240327.tif"
+    )
+    log.info("_search_tnm: 1/3 arc-second fallback URL: %s", url)
+    return url
 
 
 def _download_file(
