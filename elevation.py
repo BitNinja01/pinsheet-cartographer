@@ -205,9 +205,12 @@ def _search_tnm(bounds: tuple[float, float, float, float]) -> str | None:
         )
         resp.raise_for_status()
 
+        items = resp.json().get("items", [])
+        log.info("_search_tnm: bbox=%s got %d items", params["bbox"], len(items))
+
         preferred: list[str] = []
         fallback: list[str] = []
-        for item in resp.json().get("items", []):
+        for item in items:
             if "1 Meter" not in item.get("title", ""):
                 continue
             for key in ("downloadURL", "url", "URL"):
@@ -219,12 +222,17 @@ def _search_tnm(bounds: tuple[float, float, float, float]) -> str | None:
                         preferred.append(url)
                     break
 
+        log.info("_search_tnm: %d preferred, %d fallback", len(preferred), len(fallback))
         if preferred:
+            log.info("_search_tnm: using preferred URL: %s", preferred[0])
             return preferred[0]
         if fallback:
+            log.info("_search_tnm: using fallback URL: %s", fallback[0])
             return fallback[0]
+        log.warning("_search_tnm: no suitable DEM found")
         return None
-    except requests.RequestException:
+    except requests.RequestException as e:
+        log.warning("_search_tnm: request failed: %s", e)
         return None
 
 
