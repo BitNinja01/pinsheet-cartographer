@@ -1,11 +1,14 @@
 """Elevation data access and green contour computation."""
 from __future__ import annotations
 
+import logging
 import math
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+log = logging.getLogger(__name__)
 from affine import Affine
 from PIL import Image
 import rasterio
@@ -388,11 +391,13 @@ def compute_elevation_shading(
     """
     sampled = sample_green_elevation(green_ring, dem_path)
     if sampled is None:
+        log.warning("compute_elevation_shading: sample_green_elevation returned None")
         return None
 
     x_2d, y_2d, z, win_transform = sampled
 
     if np.all(np.isnan(z)):
+        log.warning("compute_elevation_shading: z is all NaN")
         return None
 
     with rasterio.open(dem_path) as src:
@@ -403,6 +408,7 @@ def compute_elevation_shading(
         z_green = z[green_mask]
         z_min, z_max = np.nanmin(z_green), np.nanmax(z_green)
     else:
+        log.warning("compute_elevation_shading: no cells in green mask")
         return None
 
     z, _ = _upsample_dem(z, win_transform, factor=4)
@@ -417,7 +423,9 @@ def compute_elevation_shading(
         z_min, z_max = np.nanmin(z_green_big), np.nanmax(z_green_big)
 
     z_range = z_max - z_min
+    log.info("compute_elevation_shading: z_range=%.6f green_mask_big=%.0f cells", z_range, np.sum(green_mask_big) if green_mask_big is not None else 0)
     if z_range < 1e-9:
+        log.info("compute_elevation_shading: flat green, returning uniform gray")
         return Image.fromarray(np.full(z.shape, 128, dtype=np.uint8), mode="L")
 
     z_norm = np.clip((z - z_min) / z_range, 0.0, 1.0)
