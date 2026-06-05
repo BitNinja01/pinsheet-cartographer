@@ -497,7 +497,6 @@ def pdf_stream(course, job_id):
     )
     response.headers["Cache-Control"] = "no-cache"
     response.headers["X-Accel-Buffering"] = "no"
-    response.headers["Connection"] = "keep-alive"
     return response
 
 
