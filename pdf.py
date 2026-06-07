@@ -256,6 +256,7 @@ def _get_hole_render_data(
     contour_cache: dict[int, list] | None = None,
     status_callback: callable = None,
     compute_slots: bool = True,
+    tees: list[str] | None = None,
 ) -> dict | None:
     """Render a single hole and return raw data for page composition.
 
@@ -298,6 +299,8 @@ def _get_hole_render_data(
 
     hole_ps_data = course_ps.get("holes", {}).get(hole_key, {})
     tee_yardages = {t: int(y) for t, y in hole_ps_data.get("tees", {}).items()}
+    if tees is not None:
+        tee_yardages = {t: y for t, y in tee_yardages.items() if t in tees}
     par = int(hole_ps_data.get("par", 4))
 
     slot1_svg = ""
@@ -331,17 +334,18 @@ def _compose_standard_sheet(
     contour_cache: dict,
     status_callback: callable,
     stats_data: dict | None,
+    tees: list[str] | None = None,
 ) -> str:
     """Render a standard sheet: top-hole diagram + bottom-hole data slot."""
     top_hd = _get_hole_render_data(
         top_hole, holes_geo, scale_data, settings, course_ps,
         slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
-        status_callback=status_callback, compute_slots=False,
+        status_callback=status_callback, compute_slots=False, tees=tees,
     )
     bottom_hd = _get_hole_render_data(
         bottom_hole, holes_geo, scale_data, settings, course_ps,
         slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
-        status_callback=status_callback,
+        status_callback=status_callback, tees=tees,
     )
     if top_hd:
         top_svg = render_hole_page(
@@ -376,6 +380,7 @@ def generate_book(
     data_dir: Path | None = None,
     courses_data: dict | None = None,
     rounds_data: list[dict] | None = None,
+    tees: list[str] | None = None,
 ) -> None:
     """Generate a complete yardage book for a course.
 
@@ -422,7 +427,8 @@ def generate_book(
     for hk, hd in course_ps.get("holes", {}).items():
         total_par += int(hd.get("par", 4))
         for tee, yrd in hd.get("tees", {}).items():
-            tee_totals[tee] = tee_totals.get(tee, 0) + int(yrd)
+            if tees is None or tee in tees:
+                tee_totals[tee] = tee_totals.get(tee, 0) + int(yrd)
 
     # Load rounds data for stats (if needed)
     rounds_by_hole = {}
@@ -507,6 +513,7 @@ def generate_book(
             svg_str = _compose_standard_sheet(
                 top_hole, bottom_hole, holes_geo, scale_data, settings, course_ps,
                 slot1_mode, slot2_mode, dem_path, contour_cache, status_callback, stats_data,
+                tees=tees,
             )
 
         elif page_idx == 9:
@@ -515,7 +522,7 @@ def generate_book(
             hd = _get_hole_render_data(
                 18, holes_geo, scale_data, settings, course_ps,
                 slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
-                status_callback=status_callback,
+                status_callback=status_callback, tees=tees,
             )
             if hd:
                 bottom_svg = render_bottom_slots(
@@ -538,6 +545,7 @@ def generate_book(
             svg_str = _compose_standard_sheet(
                 top_hole, bottom_hole, holes_geo, scale_data, settings, course_ps,
                 slot1_mode, slot2_mode, dem_path, contour_cache, status_callback, stats_data,
+                tees=tees,
             )
 
         elif page_idx == 18:
@@ -545,7 +553,7 @@ def generate_book(
             hd = _get_hole_render_data(
                 18, holes_geo, scale_data, settings, course_ps,
                 slot1_mode, slot2_mode, dem_path=dem_path, contour_cache=contour_cache,
-                status_callback=status_callback, compute_slots=False,
+                status_callback=status_callback, compute_slots=False, tees=tees,
             )
             if hd:
                 top_svg = render_hole_page(
