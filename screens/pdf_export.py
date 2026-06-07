@@ -240,6 +240,7 @@ class PDFExportScreen(Screen):
             self.app.call_from_thread(self._update_status_detail, msg)
 
         try:
+            # TODO: Pass self.selected_tees as a tees filter once generate_book supports it
             generate_book(
                 course_name=self.course_name,
                 output_dir=self.output_dir,
@@ -255,7 +256,6 @@ class PDFExportScreen(Screen):
                 },
                 progress_callback=progress_callback,
                 status_callback=status_callback,
-                tees=self.selected_tees if self.selected_tees else None,
             )
             self.app.call_from_thread(self._update_status, f"PDF generated: {self.output_dir}")
             self.app.call_from_thread(self._on_success)

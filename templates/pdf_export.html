@@ -93,10 +93,13 @@
         result.style.display = 'none';
 
         var formData = new FormData(form);
+        var tees = formData.getAll('tees');
+
         var body = {
             slot1: formData.get('slot1') || 'green_grid',
             slot2: formData.get('slot2') || 'stats_panel',
             show_stats: formData.get('show_stats') !== null,
+            tees: tees.length ? tees : undefined,
             settings: {
                 'cartographer.yardage_arcs': formData.get('yardage_arcs') !== null,
                 'cartographer.green_heightmap': formData.get('green_heightmap') !== null,

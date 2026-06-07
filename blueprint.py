@@ -403,6 +403,7 @@ def _do_pdf_generate(course):
             slot2 = req_settings.get("slot2", "stats_panel")
             show_stats = req_settings.get("show_stats", True)
             pdf_settings = req_settings.get("settings", {})
+            tees = req_settings.get("tees") or None
 
             def _progress(current, total):
                 job["current"] = current
@@ -423,6 +424,7 @@ def _do_pdf_generate(course):
                 data_dir=data_dir,
                 courses_data=courses_data,
                 rounds_data=rounds_data,
+                tees=tees,
             )
 
             import shutil
