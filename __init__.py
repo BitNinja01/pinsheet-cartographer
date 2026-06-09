@@ -21,7 +21,7 @@ _FOOT_JS_MARKER = "data-action=upload-osm"
 
 plugin_info = {
     "name": "cartographer",
-    "version": "1.5.1",
+    "version": "1.5.2",
     "description": "Course geometry, hole diagrams, and yardage book generation",
     "author": "PinSheet",
 }
