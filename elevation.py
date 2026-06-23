@@ -511,15 +511,10 @@ def compute_fairway_contours(
     if fairway_mask is None:
         return []
 
-    # Upsample DEM and mask (4x) then blur — same as green pipeline
-    z, win_transform = _upsample_dem(z, win_transform, factor=4)
-    fairway_mask_big = _upsample_mask(fairway_mask, factor=4)
-    z = _gaussian_blur(z, sigma=1.5)
-
     gy, gx = np.gradient(z)
     slope = np.degrees(np.arctan(np.sqrt(gx**2 + gy**2)))
 
-    z_masked = np.where((slope < slope_threshold_deg) | ~fairway_mask_big, np.nan, z)
+    z_masked = np.where((slope < slope_threshold_deg) | ~fairway_mask, np.nan, z)
 
     if np.all(np.isnan(z_masked)):
         return []
