@@ -122,11 +122,11 @@ def get_course_dem(
     status_callback: callable | None = None,
     force: bool = False,
 ) -> Path | None:
-    """Download/cache the 1m DEM covering all green bounding boxes.
+    """Download/cache the 1m DEM covering all green and fairway bounding boxes.
 
     Args:
         course_name: Course name for cache lookup.
-        holes_geo: Per-hole geometry dict (used for green bounds).
+        holes_geo: Per-hole geometry dict (used for green and fairway bounds).
         status_callback: Optional status updates.
         force: If True, remove any cached DEM and re-download.
 
@@ -138,11 +138,11 @@ def get_course_dem(
     log.info("get_course_dem: course=%s cache=%s exists=%s force=%s",
              course_name, cache_path.name, cache_path.exists(), force)
 
-    bounds = _course_green_bounds(holes_geo)
+    bounds = _course_feature_bounds(holes_geo)
     if bounds is None:
-        log.warning("get_course_dem: no green bounds found")
+        log.warning("get_course_dem: no feature bounds found")
         return None
-    log.info("get_course_dem: green bounds=%s", bounds)
+    log.info("get_course_dem: feature bounds=%s", bounds)
 
     url = _search_tnm(bounds)
     if url is None:
@@ -164,23 +164,26 @@ def get_course_dem(
     return cache_path if exists else None
 
 
-def _course_green_bounds(holes_geo: dict) -> tuple[float, float, float, float] | None:
-    """(min_lon, min_lat, max_lon, max_lat) across all green polygons.
-    
+def _course_feature_bounds(
+    holes_geo: dict,
+) -> tuple[float, float, float, float] | None:
+    """(min_lon, min_lat, max_lon, max_lat) across all green and fairway polygons.
+
     Data is stored as [lat, lon] per OSM convention.
     """
     min_lat, max_lat = 90.0, -90.0
     min_lon, max_lon = 180.0, -180.0
     found = False
     for geom in holes_geo.values():
-        for ring in geom.get("green", []):
-            for pt in ring:
-                lat, lon = pt[0], pt[1]
-                min_lat = min(min_lat, lat)
-                max_lat = max(max_lat, lat)
-                min_lon = min(min_lon, lon)
-                max_lon = max(max_lon, lon)
-                found = True
+        for feature in ("green", "fairway"):
+            for ring in geom.get(feature, []):
+                for pt in ring:
+                    lat, lon = pt[0], pt[1]
+                    min_lat = min(min_lat, lat)
+                    max_lat = max(max_lat, lat)
+                    min_lon = min(min_lon, lon)
+                    max_lon = max(max_lon, lon)
+                    found = True
     return (min_lon, min_lat, max_lon, max_lat) if found else None
 
 
@@ -454,3 +457,70 @@ def compute_elevation_shading(
     z_uint8 = (z_norm * 255).astype(np.uint8)
 
     return Image.fromarray(z_uint8, mode="L")
+
+
+def compute_fairway_contours(
+    fairway_ring: list[list[float]],
+    dem_path: Path,
+    interval: float = 0.3,
+    slope_threshold_deg: float = 2.0,
+) -> list[list[list[float]]]:
+    """Extract contour polylines for a fairway polygon using DEM elevation data.
+
+    Applies a slope mask (cells below threshold -> NODATA) so flat areas
+    produce no contours. Levels are spaced at *interval* metres elevation.
+
+    Args:
+        fairway_ring: List of [lat, lon] vertices.
+        dem_path: Path to cached 1m GeoTIFF.
+        interval: Elevation interval in metres between contour levels.
+        slope_threshold_deg: Minimum slope angle (degrees) for contouring.
+
+    Returns:
+        List of contour paths, each [[lat, lon], ...].
+    """
+    sampled = sample_green_elevation(fairway_ring, dem_path)
+    if sampled is None:
+        return []
+
+    x_2d, y_2d, z, win_transform = sampled
+
+    with rasterio.open(dem_path) as src:
+        src_crs = src.crs
+
+    fairway_mask = _in_green_mask(x_2d, y_2d, z, fairway_ring, src_crs)
+    if fairway_mask is None:
+        return []
+
+    gy, gx = np.gradient(z)
+    slope = np.degrees(np.arctan(np.sqrt(gx**2 + gy**2)))
+
+    z_masked = np.where((slope < slope_threshold_deg) | ~fairway_mask, np.nan, z)
+
+    if np.all(np.isnan(z_masked)):
+        return []
+
+    z_min = np.nanmin(z_masked)
+    z_max = np.nanmax(z_masked)
+    z_range = z_max - z_min
+    if z_range < interval:
+        return []
+
+    z_floor = np.floor(z_min / interval) * interval
+    z_ceil = np.ceil(z_max / interval) * interval
+    levels = list(np.arange(z_floor, z_ceil + interval / 2, interval))
+
+    raw_contours = compute_contours(z_masked, levels)
+
+    contour_paths: list[list[list[float]]] = []
+    for level in sorted(raw_contours):
+        for polyline in raw_contours[level]:
+            crs_xs = win_transform.c + polyline[:, 0] * win_transform.a
+            crs_ys = win_transform.f + polyline[:, 1] * win_transform.e
+            lons, lats = warp_transform(src_crs, CRS.from_epsg(4326), crs_xs, crs_ys)
+            path = [[lat, lon] for lat, lon in zip(lats, lons)]
+
+            if len(path) >= 2:
+                contour_paths.append(path)
+
+    return contour_paths

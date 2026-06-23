@@ -210,6 +210,117 @@ def test_elevation_shading_flat():
         assert all(p == 128 for p in pixels)
 
 
+def test_fairway_contours_no_dem():
+    """No DEM returns empty list."""
+    from cartographer.elevation import compute_fairway_contours
+    ring = [[47.0, -122.3], [47.0, -122.29], [47.01, -122.29], [47.01, -122.3]]
+    result = compute_fairway_contours(ring, Path("/nonexistent.tif"))
+    assert result == []
+
+
+def test_fairway_contours_with_slope():
+    """Fairway with slope produces contour paths."""
+    from unittest.mock import patch, MagicMock
+    from pathlib import Path
+    import numpy as np
+    from affine import Affine
+    from rasterio.crs import CRS
+    from cartographer.elevation import compute_fairway_contours
+
+    ring = [[47.0, -122.3], [47.0, -122.29], [47.01, -122.29], [47.01, -122.3]]
+
+    ny, nx = 40, 40
+    x = np.arange(nx, dtype=float)
+    y = np.arange(ny, dtype=float)
+    x_2d, y_2d = np.meshgrid(x, y, indexing="xy")
+    z = 100.0 + np.tile(np.linspace(0, 3.0, nx), (ny, 1))
+
+    win_transform = Affine(1.0, 0.0, 0.0, 0.0, -1.0, 40.0)
+
+    with (
+        patch("cartographer.elevation.sample_green_elevation",
+              return_value=(x_2d, y_2d, z, win_transform)),
+        patch("rasterio.open") as mock_rio,
+        patch("cartographer.elevation._in_green_mask") as mock_mask,
+    ):
+        mock_src = MagicMock()
+        mock_src.crs = CRS.from_epsg(4326)
+        mock_rio.return_value.__enter__.return_value = mock_src
+        mock_mask.return_value = np.ones_like(z, dtype=bool)
+        result = compute_fairway_contours(ring, Path("/fake.tif"),
+                                          interval=0.3, slope_threshold_deg=0.5)
+        assert isinstance(result, list)
+        assert len(result) >= 1
+        assert all(len(path) >= 2 for path in result)
+
+
+def test_fairway_contours_all_flat():
+    """Flat fairway returns empty list (range < interval)."""
+    from unittest.mock import patch, MagicMock
+    from pathlib import Path
+    import numpy as np
+    from affine import Affine
+    from rasterio.crs import CRS
+    from cartographer.elevation import compute_fairway_contours
+
+    ring = [[47.0, -122.3], [47.0, -122.29], [47.01, -122.29], [47.01, -122.3]]
+
+    ny, nx = 10, 10
+    x = np.arange(nx, dtype=float)
+    y = np.arange(ny, dtype=float)
+    x_2d, y_2d = np.meshgrid(x, y, indexing="xy")
+    z = 100.0 * np.ones((ny, nx))
+
+    win_transform = Affine(1.0, 0.0, 0.0, 0.0, -1.0, 10.0)
+
+    with (
+        patch("cartographer.elevation.sample_green_elevation",
+              return_value=(x_2d, y_2d, z, win_transform)),
+        patch("rasterio.open") as mock_rio,
+        patch("cartographer.elevation._in_green_mask") as mock_mask,
+    ):
+        mock_src = MagicMock()
+        mock_src.crs = CRS.from_epsg(4326)
+        mock_rio.return_value.__enter__.return_value = mock_src
+        mock_mask.return_value = np.ones_like(z, dtype=bool)
+        result = compute_fairway_contours(ring, Path("/fake.tif"))
+        assert result == []
+
+
+def test_fairway_contours_low_slope():
+    """Fairway with below-threshold slope returns empty list."""
+    from unittest.mock import patch, MagicMock
+    from pathlib import Path
+    import numpy as np
+    from affine import Affine
+    from rasterio.crs import CRS
+    from cartographer.elevation import compute_fairway_contours
+
+    ring = [[47.0, -122.3], [47.0, -122.29], [47.01, -122.29], [47.01, -122.3]]
+
+    ny, nx = 10, 10
+    x = np.arange(nx, dtype=float)
+    y = np.arange(ny, dtype=float)
+    x_2d, y_2d = np.meshgrid(x, y, indexing="xy")
+    z = 100.0 + np.tile(np.linspace(0, 0.5, nx), (ny, 1))
+
+    win_transform = Affine(1.0, 0.0, 0.0, 0.0, -1.0, 10.0)
+
+    with (
+        patch("cartographer.elevation.sample_green_elevation",
+              return_value=(x_2d, y_2d, z, win_transform)),
+        patch("rasterio.open") as mock_rio,
+        patch("cartographer.elevation._in_green_mask") as mock_mask,
+    ):
+        mock_src = MagicMock()
+        mock_src.crs = CRS.from_epsg(4326)
+        mock_rio.return_value.__enter__.return_value = mock_src
+        mock_mask.return_value = np.ones_like(z, dtype=bool)
+        result = compute_fairway_contours(ring, Path("/fake.tif"),
+                                          interval=0.3, slope_threshold_deg=5.0)
+        assert result == []
+
+
 def test_elevation_shading_upscaled_dimensions():
     """4x upscale produces 4x dimensions."""
     from unittest.mock import patch, MagicMock

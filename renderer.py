@@ -13,6 +13,7 @@ import svgwrite
 from .data import load_courses_geo
 from .geometry import (
     project_course, fit_hole, smooth_hole_geometry, chaikin_smooth,
+    chaikin_smooth_open,
     compute_pixels_per_yard_from_geometry, get_green_centroid,
     find_overview_rotation, opening_ring,
     rotate_ring, rotate_point, compute_fit,
@@ -165,6 +166,47 @@ def render_hole(
                 fill="#000000",
                 stroke="none",
             ))
+
+    # Fairway contours — drawn from hole_data["contours"] clipped to fairway polygon
+    contour_paths = hole_geom.get("contours", [])
+    if contour_paths and settings.get("cartographer.fairway_contours", False):
+        fairway_rings = hole_geom.get("fairway", [])
+        if fairway_rings:
+            processed: list[list[list[float]]] = []
+            for path in contour_paths:
+                if len(path) >= 2:
+                    pts = [(float(p[0]), float(p[1])) for p in path]
+                    if len(pts) >= 2 * 33:
+                        decimated = pts[::33]
+                        if decimated[-1] != pts[-1]:
+                            decimated.append(pts[-1])
+                    else:
+                        decimated = pts
+                    smoothed = chaikin_smooth_open(decimated, iterations=3)
+                    if len(smoothed) >= 2:
+                        total_len = sum(
+                            math.hypot(smoothed[i][0] - smoothed[i-1][0],
+                                       smoothed[i][1] - smoothed[i-1][1])
+                            for i in range(1, len(smoothed))
+                        )
+                        if total_len >= 30.0:
+                            processed.append([[x, y] for x, y in smoothed])
+
+            if processed:
+                g = dwg.g()
+                clip_id = f"fw-contour-{id(processed)}"
+                clip = dwg.defs.add(dwg.clipPath(id=clip_id))
+                for ring in fairway_rings:
+                    clip.add(dwg.polygon(points=[(float(x), float(y)) for x, y in ring]))
+                inner = g.add(dwg.g(clip_path=f"url(#{clip_id})"))
+                for path in processed:
+                    if len(path) >= 2:
+                        d = "M " + " ".join(f"{p[0]:.2f},{p[1]:.2f}" for p in path)
+                        inner.add(dwg.path(
+                            d=d, stroke="#000000",
+                            stroke_width=_STROKE_WIDTH, fill="none",
+                        ))
+                dwg.add(g)
 
     return dwg.tostring()
 

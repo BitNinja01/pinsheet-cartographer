@@ -282,6 +282,7 @@ def register(app):
     # 9. Default settings
     app.config.setdefault("plugins.cartographer.yardage_arcs", True)
     app.config.setdefault("plugins.cartographer.yardage_arc_distances", [100, 125, 150, 175, 200])
+    app.config.setdefault("plugins.cartographer.fairway_contours", False)
 
     log.info("cartographer: registered v%s", plugin_info["version"])
 
@@ -291,6 +292,7 @@ def unregister(app):
     carto_data._server_data_dir = None
     app.config.pop("plugins.cartographer.yardage_arcs", None)
     app.config.pop("plugins.cartographer.yardage_arc_distances", None)
+    app.config.pop("plugins.cartographer.fairway_contours", None)
 
     head_tag = '<link rel="stylesheet" href="/plugins/cartographer/static/cartographer.css">'
     current_head = app._plugin_blocks.get("head", "")

@@ -25,7 +25,7 @@ from .geometry import (
     compute_pixels_per_yard_from_geometry,
 )
 from .renderer import render_hole, render_green, render_course_overview
-from .elevation import get_course_dem, compute_elevation_shading, compute_slot_contours
+from .elevation import get_course_dem, compute_elevation_shading, compute_slot_contours, compute_fairway_contours
 from .layout import (
     compose_sheet, compose_front_page, compose_back_page, compose_chart_page,
     compose_notes_page, render_hole_page, render_bottom_slots,
@@ -270,6 +270,21 @@ def _get_hole_render_data(
     hole_key = str(hole_num)
     if hole_key not in holes_geo:
         return None
+
+    # Compute fairway contours from DEM if enabled
+    if (dem_path is not None
+        and settings.get("cartographer.fairway_contours", False)
+        and not holes_geo[hole_key].get("contours")):
+        hole_data = holes_geo[hole_key]
+        if hole_data.get("fairway"):
+            if status_callback:
+                status_callback(f"Computing fairway contours for hole {hole_num}...")
+            all_contours: list[list[list[float]]] = []
+            for fairway_ring in hole_data["fairway"]:
+                paths = compute_fairway_contours(fairway_ring, dem_path)
+                all_contours.extend(paths)
+            if all_contours:
+                hole_data["contours"] = all_contours
 
     ppy = compute_pixels_per_yard_from_geometry(
         {hole_key: holes_geo[hole_key]}, canvas_h=HOLE_CANVAS_H
