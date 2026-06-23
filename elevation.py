@@ -463,7 +463,7 @@ def compute_fairway_contours(
     fairway_ring: list[list[float]],
     dem_path: Path,
     interval: float = 0.3,
-    slope_threshold_deg: float = 6.0,
+    slope_threshold_deg: float = 3.0,
 ) -> list[list[list[float]]]:
     """Extract contour polylines for a fairway polygon using DEM elevation data.
 
