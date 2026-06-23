@@ -37,6 +37,7 @@
             <label class="settings-toggle"><input type="checkbox" name="green_arrows" checked>Green arrows</label>
             <label class="settings-toggle"><input type="checkbox" name="fairway_contours">Fairway contours</label>
             <label class="settings-toggle"><input type="checkbox" name="fairway_arrows">Fairway arrows</label>
+            <label class="settings-toggle"><input type="checkbox" name="force_dem">Re-download elevation data</label>
         </div>
         {% if tees %}
         <div class="wizard-step">
@@ -109,6 +110,7 @@
                 'cartographer.green_arrows': formData.get('green_arrows') !== null,
                 'cartographer.fairway_contours': formData.get('fairway_contours') !== null,
                 'cartographer.fairway_arrows': formData.get('fairway_arrows') !== null,
+                'cartographer.force_dem': formData.get('force_dem') !== null,
             }
         };
 

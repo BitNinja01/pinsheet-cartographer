@@ -425,6 +425,7 @@ def _do_pdf_generate(course):
                 courses_data=courses_data,
                 rounds_data=rounds_data,
                 tees=tees,
+                force_dem=pdf_settings.get("cartographer.force_dem", False),
             )
 
             import shutil

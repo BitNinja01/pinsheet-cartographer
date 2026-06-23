@@ -458,6 +458,7 @@ def generate_book(
     courses_data: dict | None = None,
     rounds_data: list[dict] | None = None,
     tees: list[str] | None = None,
+    force_dem: bool = False,
 ) -> None:
     """Generate a complete yardage book for a course.
 
@@ -563,7 +564,7 @@ def generate_book(
     holes_geo = course_geo.get("holes", {})
     scale_data = course_geo.get("scale", {})
 
-    dem_path = get_course_dem(course_name, holes_geo, status_callback=status_callback, force=True)
+    dem_path = get_course_dem(course_name, holes_geo, status_callback=status_callback, force=force_dem)
 
     safe_course = course_name.lower().replace(" ", "_").replace("'", "").replace('"', "")
 
