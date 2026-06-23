@@ -568,4 +568,5 @@ def smooth_hole_geometry(
     smoothed["paths"] = [chaikin_smooth_open(line, iterations) for line in hole_geom.get("paths", [])]
     smoothed["waterways"] = [chaikin_smooth_open(line, iterations) for line in hole_geom.get("waterways", [])]
     smoothed["tee_boxes"] = hole_geom.get("tee_boxes", {})
+    smoothed["contours"] = list(hole_geom.get("contours", []))
     return smoothed
