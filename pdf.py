@@ -323,9 +323,10 @@ def _get_hole_render_data(
     if hole_key not in holes_geo:
         return None
 
-    # Compute fairway contours from DEM if enabled
+    # Compute fairway contours from DEM if either contours or arrows enabled
     if (dem_path is not None
-        and settings.get("cartographer.fairway_contours", False)
+        and (settings.get("cartographer.fairway_contours", False)
+             or settings.get("cartographer.fairway_arrows", False))
         and not holes_geo[hole_key].get("contours")):
         hole_data = holes_geo[hole_key]
         if hole_data.get("fairway"):
@@ -363,7 +364,6 @@ def _get_hole_render_data(
         fitted["_arcs"] = compute_yardage_arcs((gcx, gcy), distances, ppy, scale)
 
     if (dem_path is not None
-        and settings.get("cartographer.fairway_contours", False)
         and settings.get("cartographer.fairway_arrows", False)
         and fitted.get("contours")):
         fairway_arrows = _compute_fairway_arrows(

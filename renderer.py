@@ -167,38 +167,45 @@ def render_hole(
                 stroke="none",
             ))
 
-    # Fairway contours — drawn from hole_data["contours"] clipped to fairway polygon
+    # Fairway contours and arrows — clipped to fairway polygon
     contour_paths = hole_geom.get("contours", [])
-    if contour_paths and settings.get("cartographer.fairway_contours", False):
+    fairway_arrows = hole_geom.get("fairway_arrows", [])
+    show_contours = settings.get("cartographer.fairway_contours", False)
+    show_arrows = settings.get("cartographer.fairway_arrows", False)
+
+    if ((contour_paths and show_contours) or (fairway_arrows and show_arrows)):
         fairway_rings = hole_geom.get("fairway", [])
         if fairway_rings:
+            # Process contour paths for drawing
             processed: list[list[list[float]]] = []
-            for path in contour_paths:
-                if len(path) >= 2:
-                    pts = [(float(p[0]), float(p[1])) for p in path]
-                    if len(pts) >= 2 * 33:
-                        decimated = pts[::33]
-                        if decimated[-1] != pts[-1]:
-                            decimated.append(pts[-1])
-                    else:
-                        decimated = pts
-                    smoothed = chaikin_smooth_open(decimated, iterations=3)
-                    if len(smoothed) >= 2:
-                        total_len = sum(
-                            math.hypot(smoothed[i][0] - smoothed[i-1][0],
-                                       smoothed[i][1] - smoothed[i-1][1])
-                            for i in range(1, len(smoothed))
-                        )
-                        if total_len >= 30.0:
-                            processed.append([[x, y] for x, y in smoothed])
+            if show_contours and contour_paths:
+                for path in contour_paths:
+                    if len(path) >= 2:
+                        pts = [(float(p[0]), float(p[1])) for p in path]
+                        if len(pts) >= 2 * 33:
+                            decimated = pts[::33]
+                            if decimated[-1] != pts[-1]:
+                                decimated.append(pts[-1])
+                        else:
+                            decimated = pts
+                        smoothed = chaikin_smooth_open(decimated, iterations=3)
+                        if len(smoothed) >= 2:
+                            total_len = sum(
+                                math.hypot(smoothed[i][0] - smoothed[i-1][0],
+                                           smoothed[i][1] - smoothed[i-1][1])
+                                for i in range(1, len(smoothed))
+                            )
+                            if total_len >= 30.0:
+                                processed.append([[x, y] for x, y in smoothed])
+
+            g = dwg.g()
+            clip_id = f"fw-{id(hole_geom)}"
+            clip = dwg.defs.add(dwg.clipPath(id=clip_id))
+            for ring in fairway_rings:
+                clip.add(dwg.polygon(points=[(float(x), float(y)) for x, y in ring]))
+            inner = g.add(dwg.g(clip_path=f"url(#{clip_id})"))
 
             if processed:
-                g = dwg.g()
-                clip_id = f"fw-contour-{id(processed)}"
-                clip = dwg.defs.add(dwg.clipPath(id=clip_id))
-                for ring in fairway_rings:
-                    clip.add(dwg.polygon(points=[(float(x), float(y)) for x, y in ring]))
-                inner = g.add(dwg.g(clip_path=f"url(#{clip_id})"))
                 for path in processed:
                     if len(path) >= 2:
                         d = "M " + " ".join(f"{p[0]:.2f},{p[1]:.2f}" for p in path)
@@ -206,28 +213,28 @@ def render_hole(
                             d=d, stroke="#000000",
                             stroke_width=_STROKE_WIDTH, fill="none",
                         ))
-                fairway_arrows = hole_geom.get("fairway_arrows", [])
-                if fairway_arrows and settings.get("cartographer.fairway_arrows", False):
-                    arrow_color = "#000000"
-                    for (cx, cy), (dx, dy) in fairway_arrows:
-                        angle = math.atan2(dy, dx)
-                        leg_len = 5.0
-                        half_angle = math.radians(30)
-                        lx = cx + leg_len * math.cos(angle - half_angle)
-                        ly = cy + leg_len * math.sin(angle - half_angle)
-                        rx = cx + leg_len * math.cos(angle + half_angle)
-                        ry = cy + leg_len * math.sin(angle + half_angle)
-                        inner.add(dwg.polyline(
-                            points=[(lx, ly), (cx, cy), (rx, ry)],
-                            stroke=arrow_color, stroke_width=0.75, fill="none",
-                        ))
-                        shaft_len = 10.0
-                        inner.add(dwg.line(
-                            start=(cx, cy),
-                            end=(cx + dx * shaft_len, cy + dy * shaft_len),
-                            stroke=arrow_color, stroke_width=0.75,
-                        ))
-                dwg.add(g)
+
+            if fairway_arrows and show_arrows:
+                arrow_color = "#000000"
+                for (cx, cy), (dx, dy) in fairway_arrows:
+                    angle = math.atan2(dy, dx)
+                    leg_len = 5.0
+                    half_angle = math.radians(30)
+                    lx = cx + leg_len * math.cos(angle - half_angle)
+                    ly = cy + leg_len * math.sin(angle - half_angle)
+                    rx = cx + leg_len * math.cos(angle + half_angle)
+                    ry = cy + leg_len * math.sin(angle + half_angle)
+                    inner.add(dwg.polyline(
+                        points=[(lx, ly), (cx, cy), (rx, ry)],
+                        stroke=arrow_color, stroke_width=0.75, fill="none",
+                    ))
+                    shaft_len = 10.0
+                    inner.add(dwg.line(
+                        start=(cx, cy),
+                        end=(cx + dx * shaft_len, cy + dy * shaft_len),
+                        stroke=arrow_color, stroke_width=0.75,
+                    ))
+            dwg.add(g)
 
     return dwg.tostring()
 
