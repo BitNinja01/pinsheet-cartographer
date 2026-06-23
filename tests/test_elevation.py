@@ -75,6 +75,7 @@ def test_dem_cached():
     with patch("cartographer.data.get_dem_path") as mock_path:
         mock_path.return_value = MagicMock(spec=Path)
         mock_path.return_value.exists.return_value = True
+        mock_path.return_value.stat.return_value.st_mtime = 0  # ancient, so API query runs
         with patch.object(elevation_mod, "_search_tnm", return_value=None):
             with patch("cartographer.elevation.requests.get") as mock_get:
                 result = get_course_dem("test", holes)
