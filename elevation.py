@@ -132,21 +132,30 @@ def get_course_dem(
 
     Returns path to cached GeoTIFF or None if unavailable.
     """
+    import time
+
     from .data import get_dem_path
 
     cache_path = get_dem_path(course_name)
 
     # If not force and cache is recent (< 7 days), skip API query
     if not force and cache_path.exists():
-        import time
         cache_age = time.time() - cache_path.stat().st_mtime
         if cache_age < 7 * 24 * 3600:
             log.info("get_course_dem: cache is recent (%.1f hours old), returning cached",
                      cache_age / 3600)
-            return cache_path
+            # Validate the cached DEM is actually readable
+            try:
+                with rasterio.open(cache_path):
+                    pass
+                return cache_path
+            except Exception:
+                log.warning("get_course_dem: cached DEM is corrupted, will re-download")
+                cache_path.unlink()
 
-    log.info("get_course_dem: course=%s cache=%s exists=%s force=%s",
-             course_name, cache_path.name, cache_path.exists(), force)
+    log.info("get_course_dem: course=%s cache=%s exists=%s force=%s cache_age=%.1fh",
+             course_name, cache_path.name, cache_path.exists(), force,
+             (time.time() - cache_path.stat().st_mtime) / 3600 if cache_path.exists() else 0)
 
     bounds = _course_feature_bounds(holes_geo)
     if bounds is None:

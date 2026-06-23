@@ -7,6 +7,7 @@ combines them into 5 saddle-stitch booklet PDFs (8.5" x 14") using pypdf.
 from __future__ import annotations
 
 import io
+import logging
 import math
 import sys
 from pathlib import Path
@@ -14,6 +15,8 @@ from pathlib import Path
 import numpy as np
 
 import cairosvg
+
+log = logging.getLogger(__name__)
 from PIL import Image
 from shapely.geometry import Polygon, LineString
 from pypdf import PdfWriter, PdfReader, Transformation
@@ -329,15 +332,18 @@ def _get_hole_render_data(
              or settings.get("cartographer.fairway_arrows", False))
         and not holes_geo[hole_key].get("contours")):
         hole_data = holes_geo[hole_key]
+        all_contours: list[list[list[float]]] = []
         if hole_data.get("fairway"):
             if status_callback:
                 status_callback(f"Computing fairway contours for hole {hole_num}...")
-            all_contours: list[list[list[float]]] = []
             for fairway_ring in hole_data["fairway"]:
                 paths = compute_fairway_contours(fairway_ring, dem_path)
                 all_contours.extend(paths)
-            if all_contours:
-                hole_data["contours"] = all_contours
+        hole_data["contours"] = all_contours
+        log.info("get_hole_render_data: hole=%s computed %d fairway contour paths (settings: contours=%s arrows=%s)",
+                 hole_key, len(all_contours),
+                 settings.get("cartographer.fairway_contours", False),
+                 settings.get("cartographer.fairway_arrows", False))
 
     ppy = compute_pixels_per_yard_from_geometry(
         {hole_key: holes_geo[hole_key]}, canvas_h=HOLE_CANVAS_H
@@ -371,6 +377,10 @@ def _get_hole_render_data(
         )
         if fairway_arrows:
             fitted["fairway_arrows"] = fairway_arrows
+            log.info("get_hole_render_data: hole=%s computed %d fairway arrows",
+                     hole_key, len(fairway_arrows))
+        else:
+            log.info("get_hole_render_data: hole=%s fairway arrows returned empty", hole_key)
 
     hole_svg = render_hole(fitted, settings=settings)
 
