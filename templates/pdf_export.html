@@ -36,6 +36,7 @@
             <label class="settings-toggle"><input type="checkbox" name="green_contours" checked>Green contours</label>
             <label class="settings-toggle"><input type="checkbox" name="green_arrows" checked>Green arrows</label>
             <label class="settings-toggle"><input type="checkbox" name="fairway_contours">Fairway contours</label>
+            <label class="settings-toggle"><input type="checkbox" name="fairway_arrows">Fairway arrows</label>
         </div>
         {% if tees %}
         <div class="wizard-step">
@@ -107,6 +108,7 @@
                 'cartographer.green_contours': formData.get('green_contours') !== null,
                 'cartographer.green_arrows': formData.get('green_arrows') !== null,
                 'cartographer.fairway_contours': formData.get('fairway_contours') !== null,
+                'cartographer.fairway_arrows': formData.get('fairway_arrows') !== null,
             }
         };
 

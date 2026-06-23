@@ -244,6 +244,56 @@ def _compute_slot_content(
     return slot1_svg, slot2_svg
 
 
+def _compute_fairway_arrows(
+    hole_geo_latlon: dict,
+    fitted: dict,
+    dem_path: Path,
+) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    """Compute downhill arrows for fairway contours.
+
+    Generates a DEM shading image over the fairway, resizes it to the
+    fitted fairway bbox, and computes arrow directions from the gradient.
+
+    hole_geo_latlon: original [lat, lon] hole geometry dict.
+    fitted: output of fit_hole() — pixel coords in SVG space.
+    dem_path: cached 1m DEM GeoTIFF.
+
+    Returns list of ((anchor_x, anchor_y), (dir_x, dir_y)) or empty list.
+    """
+    from .renderer import _compute_arrows
+    import io as _io
+
+    fairway_rings = hole_geo_latlon.get("fairway", [])
+    if not fairway_rings:
+        return []
+
+    shading = compute_elevation_shading(fairway_rings[0], dem_path)
+    if shading is None:
+        return []
+
+    fitted_fairways = fitted.get("fairway", [])
+    if not fitted_fairways:
+        return []
+
+    xs = [p[0] for ring in fitted_fairways for p in ring]
+    ys = [p[1] for ring in fitted_fairways for p in ring]
+    fx_min, fx_max = min(xs), max(xs)
+    fy_min, fy_max = min(ys), max(ys)
+    fw = fx_max - fx_min or 1.0
+    fh = fy_max - fy_min or 1.0
+
+    img_resized = shading.resize(
+        (max(1, int(fw)), max(1, int(fh))), Image.LANCZOS,
+    )
+    buf = _io.BytesIO()
+    img_resized.save(buf, format="PNG")
+
+    bbox = (fx_min, fy_min, fx_max, fy_max)
+    contour_paths = fitted.get("contours", [])
+
+    return _compute_arrows(buf.getvalue(), bbox, contour_paths, spacing=12.0)
+
+
 def _get_hole_render_data(
     hole_num: int,
     holes_geo: dict,
@@ -309,6 +359,16 @@ def _get_hole_render_data(
         distances = settings.get("cartographer.yardage_arc_distances", [100, 125, 150])
         gcx, gcy = get_green_centroid(fitted)
         fitted["_arcs"] = compute_yardage_arcs((gcx, gcy), distances, ppy, scale)
+
+    if (dem_path is not None
+        and settings.get("cartographer.fairway_contours", False)
+        and settings.get("cartographer.fairway_arrows", False)
+        and fitted.get("contours")):
+        fairway_arrows = _compute_fairway_arrows(
+            holes_geo[hole_key], fitted, dem_path,
+        )
+        if fairway_arrows:
+            fitted["fairway_arrows"] = fairway_arrows
 
     hole_svg = render_hole(fitted, settings=settings)
 

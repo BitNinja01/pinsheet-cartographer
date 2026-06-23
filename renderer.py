@@ -206,6 +206,27 @@ def render_hole(
                             d=d, stroke="#000000",
                             stroke_width=_STROKE_WIDTH, fill="none",
                         ))
+                fairway_arrows = hole_geom.get("fairway_arrows", [])
+                if fairway_arrows and settings.get("cartographer.fairway_arrows", False):
+                    arrow_color = "#000000"
+                    for (cx, cy), (dx, dy) in fairway_arrows:
+                        angle = math.atan2(dy, dx)
+                        leg_len = 5.0
+                        half_angle = math.radians(30)
+                        lx = cx + leg_len * math.cos(angle - half_angle)
+                        ly = cy + leg_len * math.sin(angle - half_angle)
+                        rx = cx + leg_len * math.cos(angle + half_angle)
+                        ry = cy + leg_len * math.sin(angle + half_angle)
+                        inner.add(dwg.polyline(
+                            points=[(lx, ly), (cx, cy), (rx, ry)],
+                            stroke=arrow_color, stroke_width=0.75, fill="none",
+                        ))
+                        shaft_len = 10.0
+                        inner.add(dwg.line(
+                            start=(cx, cy),
+                            end=(cx + dx * shaft_len, cy + dy * shaft_len),
+                            stroke=arrow_color, stroke_width=0.75,
+                        ))
                 dwg.add(g)
 
     return dwg.tostring()
