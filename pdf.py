@@ -291,7 +291,9 @@ def _compute_fairway_arrows(
     bbox = (fx_min, fy_min, fx_max, fy_max)
     contour_paths = fitted.get("contours", [])
 
-    return _compute_arrows(buf.getvalue(), bbox, contour_paths, spacing=12.0)
+    arrows = _compute_arrows(buf.getvalue(), bbox, contour_paths, spacing=12.0)
+    # DEM gradient points from low→high (uphill); negate for downhill
+    return [((x, y), (-dx, -dy)) for (x, y), (dx, dy) in arrows]
 
 
 def _get_hole_render_data(
