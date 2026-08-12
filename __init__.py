@@ -16,9 +16,6 @@ from flask import Blueprint
 
 log = logging.getLogger("pinsheet")
 
-# JS prefix used to identify our foot block for cleanup
-_FOOT_JS_MARKER = "data-action=upload-osm"
-
 plugin_info = {
     "name": "cartographer",
     "version": "1.5.2",
@@ -224,58 +221,16 @@ def register(app):
     except Exception as _exc:
         log.warning("cartographer: blueprint registration failed — %s", _exc)
 
+    from source.plugin_api import add_block
+
     # 6. Inject CSS
-    head_tag = '<link rel="stylesheet" href="/plugins/cartographer/static/cartographer.css">'
-    app._plugin_blocks["head"] = (
-        (app._plugin_blocks.get("head", "") + "\n" + head_tag).strip()
-    )
+    add_block(app, "cartographer", "head",
+              '<link rel="stylesheet" href="/plugins/cartographer/static/cartographer.css">')
 
     app._plugin_course_actions.append({"actions_fn": _course_actions})
 
-    _detail_actions_js = (
-        '<script>'
-        '(function(){'
-        'var m=location.pathname.match(/^\\/courses\\/([^/]+)$/);'
-        'if(m&&document.querySelector(".round-actions")){'
-        'var enc=encodeURIComponent(decodeURIComponent(m[1]));'
-        'fetch("/plugins/cartographer/"+enc+"/actions-html").then(function(r){return r.text()}).then(function(h){'
-        'if(h){'
-        'var div=document.querySelector(".round-actions");'
-        'div.insertAdjacentHTML("beforeend",h);'
-        '}'
-        '});'
-        '}'
-        '})();'
-        'document.addEventListener("click",function(e){'
-        'var t=e.target.closest("[data-action=upload-osm]");'
-        'if(!t)return;'
-        'var inp=document.createElement("input");'
-        'inp.type="file";inp.accept=".osm";inp.style.display="none";'
-        'inp.addEventListener("change",function(){'
-        'var f=this.files[0];if(!f)return;'
-        'var fd=new FormData();fd.append("osm_file",f);'
-        'var btn=t;btn.textContent="Uploading...";'
-        'fetch("/plugins/cartographer/"+encodeURIComponent(t.getAttribute("data-course"))+"/upload-osm",{method:"POST",body:fd})'
-        '.then(function(r){if(r.ok){location.reload()}else{return r.json().then(function(d){btn.textContent=d.message||"Upload failed";setTimeout(function(){btn.textContent="Upload OSM"},3000)})}})'
-        '.catch(function(){btn.textContent="Network error";setTimeout(function(){btn.textContent="Upload OSM"},3000)});'
-        '});'
-        'document.body.appendChild(inp);inp.click();document.body.removeChild(inp);'
-        '});'
-        'document.addEventListener("click",function(e){'
-        'var t=e.target.closest("[data-action=delete-osm]");'
-        'if(!t)return;'
-        'e.preventDefault();'
-        'if(!confirm("Delete cached OSM and elevation data for this course?"))return;'
-        'var btn=t;var orig=btn.textContent;btn.textContent="Deleting...";'
-        'fetch("/plugins/cartographer/"+encodeURIComponent(t.getAttribute("data-course"))+"/osm",{method:"DELETE"})'
-        '.then(function(r){if(r.ok){location.reload()}else{return r.json().then(function(d){alert(d.message||"Delete failed");btn.textContent=orig})}})'
-        '.catch(function(){alert("Network error");btn.textContent=orig});'
-        '});'
-        '</script>'
-    )
-    app._plugin_blocks["foot"] = (
-        (app._plugin_blocks.get("foot", "") + "\n" + _detail_actions_js).strip()
-    )
+    add_block(app, "cartographer", "foot",
+              '<script src="/plugins/cartographer/static/course-detail-actions.js"></script>')
 
     # 8. Nav link removed — cartographer actions are on the core Courses pages
 
@@ -298,12 +253,8 @@ def unregister(app):
     current_head = app._plugin_blocks.get("head", "")
     app._plugin_blocks["head"] = current_head.replace(head_tag, "").strip()
 
+    foot_tag = '<script src="/plugins/cartographer/static/course-detail-actions.js"></script>'
     current_foot = app._plugin_blocks.get("foot", "")
-    if _FOOT_JS_MARKER in current_foot:
-        import re as _re
-        app._plugin_blocks["foot"] = _re.sub(
-            r'<script[^>]*>.*?' + _re.escape(_FOOT_JS_MARKER) + r'.*?</script>',
-            "", current_foot, flags=_re.DOTALL
-        ).strip()
+    app._plugin_blocks["foot"] = current_foot.replace(foot_tag, "").strip()
 
     app._plugin_course_actions.clear()
