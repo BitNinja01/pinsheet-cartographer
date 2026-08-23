@@ -40,6 +40,31 @@ HOLE_CANVAS_H = 486.0   # PAGE_CONTENT_H
 HOLE_LEFT_BIAS = 44.0   # pts — shift hole leftward on top pages; clamped to padding floor in fit_hole()
 
 
+def hole_tee_yardages(course_ps: dict, hole_key: str) -> dict[str, int]:
+    """Per-hole yardages in the canonical PinSheet shape.
+
+    Canonical course documents store per-hole yardages at the tee level:
+    ``tees[tee]["yardages"][hole] = yardage``. Missing or blank yardages
+    are skipped.
+    """
+    result = {}
+    for tname, tdata in (course_ps.get("tees") or {}).items():
+        yrd = (tdata or {}).get("yardages", {}).get(hole_key)
+        if yrd not in (None, ""):
+            result[tname] = int(yrd)
+    return result
+
+
+def _hole_par_and_index(course_ps: dict, hole_num: int) -> tuple[int, int]:
+    """Return (par, stroke index) for a hole from canonical course data.
+
+    Canonical holes carry ``par`` and ``hole_index``. Missing holes default
+    to par 4 and the hole number as index.
+    """
+    hole_ps_data = course_ps.get("holes", {}).get(str(hole_num), {})
+    return int(hole_ps_data.get("par", 4)), int(hole_ps_data.get("hole_index", hole_num))
+
+
 def _svg_to_pdf_bytes(svg_string: str) -> bytes:
     """Convert an SVG string to PDF bytes via cairosvg."""
     return cairosvg.svg2pdf(bytestring=svg_string.encode("utf-8"))
@@ -385,7 +410,7 @@ def _get_hole_render_data(
     hole_svg = render_hole(fitted, settings=settings)
 
     hole_ps_data = course_ps.get("holes", {}).get(hole_key, {})
-    tee_yardages = {t: int(y) for t, y in hole_ps_data.get("tees", {}).items()}
+    tee_yardages = hole_tee_yardages(course_ps, hole_key)
     if tees is not None:
         tee_yardages = {t: y for t, y in tee_yardages.items() if t in tees}
     par = int(hole_ps_data.get("par", 4))
@@ -514,9 +539,9 @@ def generate_book(
     tee_totals: dict[str, int] = {}
     for hk, hd in course_ps.get("holes", {}).items():
         total_par += int(hd.get("par", 4))
-        for tee, yrd in hd.get("tees", {}).items():
+        for tee, yrd in hole_tee_yardages(course_ps, hk).items():
             if tees is None or tee in tees:
-                tee_totals[tee] = tee_totals.get(tee, 0) + int(yrd)
+                tee_totals[tee] = tee_totals.get(tee, 0) + yrd
 
     # Load rounds data for stats (if needed)
     rounds_by_hole = {}
@@ -551,7 +576,7 @@ def generate_book(
             hole_key = str(hole_num)
             hole_ps_data = course_ps.get("holes", {}).get(hole_key, {})
             par = int(hole_ps_data.get("par", 4))
-            hole_hcp = int(hole_ps_data.get("handicap", hole_num))
+            hole_hcp = int(hole_ps_data.get("hole_index", hole_num))
             
             # Get current handicap index (use most recent round's handicap)
             handicap_index = 15.0  # default
